@@ -1,0 +1,23 @@
+# --- Combined learning repo: shared ignores ---
+# Node / pnpm (understand-anything/)
+node_modules/
+dist/
+*.tsbuildinfo
+.pnpm-store/
+
+# Python / uv (graphify/)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Generated knowledge graphs from analyzing projects
+.ua/
+.understand-anything/
+graphify-out/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
