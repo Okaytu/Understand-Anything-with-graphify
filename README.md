@@ -8,9 +8,28 @@ knowledge graph" projects side by side, with their **full commit history preserv
 | [`understand-anything/`](understand-anything/) | **Understand Anything**: multi-agent LLM analysis + interactive React dashboard (tours, domain view, diff impact, personas) | TypeScript · pnpm monorepo · Node ≥ 22 | MIT ([LICENSE](understand-anything/LICENSE)) | `Okaytu/Understand-Anything` @ `main` |
 | [`graphify/`](graphify/) | **graphify**: deterministic tree-sitter extraction (~40 languages, no LLM) + CLI queries (`query` / `path` / `explain`), `GRAPH_REPORT.md`, many exporters | Python ≥ 3.10 · uv | Apache-2.0 ([LICENSE](graphify/LICENSE), [NOTICE](graphify/NOTICE)) | `Okaytu/graphify` @ `v8` |
 
-The two projects are **not** merged into one program — each folder is the complete,
-unmodified project and builds/runs exactly as it does upstream. Each keeps its own
-license; nothing here relicenses either project.
+Each folder is the complete, unmodified project and builds and runs exactly as it does
+upstream. Each keeps its own license; nothing here relicenses either project. The new
+[`bridge/`](bridge/) folder connects them.
+
+## The bridge: map with graphify, explore in both viewers
+
+```bash
+bridge/run.sh /path/to/any/project
+```
+
+1. **graphify** maps the project with tree-sitter (no LLM, free, local).
+2. The bridge converts graphify's graph into an Understand-Anything knowledge graph and
+   checks it with the dashboard's own validator.
+3. Both views open side by side:
+   - **graphify view:** `http://127.0.0.1:5174/graph.html`, a force-directed graph coloured
+     by community, plus `GRAPH_REPORT.md`.
+   - **Understand-Anything dashboard:** `http://127.0.0.1:5173/?token=…`, graphify's
+     communities as layers, file → class → function drill-down, code viewer, search and a
+     generated guided tour.
+
+Use `--view ua`, `--view graphify` or `--view none` to pick one or neither. See
+[`bridge/README.md`](bridge/README.md) for the full mapping, options and tests.
 
 ## Layout
 
@@ -18,6 +37,7 @@ license; nothing here relicenses either project.
 learn-code/
 ├── understand-anything/   ← full Understand-Anything project (git subtree)
 ├── graphify/              ← full graphify project (git subtree)
+├── bridge/                ← graphify → Understand-Anything converter + one-command runner
 ├── .github/workflows/     ← one CI workflow that tests both projects
 ├── .gitignore             ← shared ignores (node_modules, .venv, .ua/, graphify-out/, …)
 └── README.md
@@ -85,4 +105,5 @@ git subtree pull --prefix=graphify graphify-upstream v8
 
 Each project's own `.github/workflows/` folder is kept for reference, but GitHub only
 runs workflows from the repository root, so they are inactive here. The root
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs both test suites instead.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs both test suites and the
+bridge tests instead.
