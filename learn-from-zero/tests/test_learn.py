@@ -66,7 +66,7 @@ def test_next_lists_unwritten_links_most_linked_first(tmp_path):
 
 
 def test_example_next_to_learn():
-    assert [t for t, _ in learn.next_to_learn(EXAMPLE)] == ["Competitors", "Hiring", "Taxes"]
+    assert learn.next_to_learn(EXAMPLE) == []  # every linked note in the example is written
 
 
 def test_build_uses_understand_anythings_wiki_pipeline(tmp_path):
@@ -77,10 +77,10 @@ def test_build_uses_understand_anythings_wiki_pipeline(tmp_path):
     assert graph["kind"] == "knowledge"
     types = {n["type"] for n in graph["nodes"]}
     assert {"article", "topic"} <= types
-    assert sum(1 for n in graph["nodes"] if n["type"] == "article") == 13
+    assert sum(1 for n in graph["nodes"] if n["type"] == "article") == 16
     assert [l["name"] for l in graph["layers"]][:4] == ["Foundations", "Money", "Operations", "Growth"]
     assert not (root / ".ua" / "intermediate").exists()
-    assert json.loads((root / ".ua" / "meta.json").read_text())["analyzedFiles"] == 13
+    assert json.loads((root / ".ua" / "meta.json").read_text())["analyzedFiles"] == 16
     # rebuilding over its own knowledge graph is fine; a code graph is protected
     assert learn.main(["build", str(root)]) == 0
     (root / ".ua" / "knowledge-graph.json").write_text(json.dumps({"kind": "codebase"}))

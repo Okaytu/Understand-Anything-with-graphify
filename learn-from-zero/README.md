@@ -26,9 +26,11 @@ Try it on the worked example first:
 learn-from-zero/learn.sh learn-from-zero/examples/how-a-business-works
 ```
 
-It is 13 notes about one café ("Corner Coffee"), from Business Model through Revenue,
-Gross Margin and Break-even Point to Unit Economics, with numbers that agree from note to
-note. `learn.py next` on it lists **Competitors, Hiring, Taxes**, the notes still to write.
+It is 16 notes about one café ("Corner Coffee"), from Business Model through Revenue,
+Gross Margin and Break-even Point to Unit Economics, Competitors, Hiring and Taxes, with
+numbers that agree from note to note. It started with 13 notes and three linked-but-missing
+ones (Competitors, Hiring, Taxes), which were then written the same way: `learn.py new`,
+then content. `learn.py next` now reports no gaps, so link a new idea to start the next round.
 Generated files (`.ua/`, `graphify-out/`) are git-ignored.
 
 ## What you get

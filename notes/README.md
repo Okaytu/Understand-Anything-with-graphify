@@ -80,8 +80,10 @@ Path 1:
    map each phase to the agent in `agents/` that does it.
 
 Path 2:
-4. Write the three missing business notes (`learn.py next` lists them: Competitors,
-   Hiring, Taxes), rebuild, and watch the Money and Growth layers change.
+4. Grow the business example by one idea the café will face next, such as Location or
+   Seasonality. Link it from at least two existing notes, run `learn.py next` to confirm
+   it is the only gap, write it, rebuild, and see which layer it joins. (Competitors,
+   Hiring and Taxes were added this way; their notes show the pattern.)
 5. Start a new wiki on a topic you know nothing about. Stop after 10 notes and look at the
    graph: which note has the most backlinks? That is your topic's "god node".
 6. Combine both paths: write a notes wiki explaining the *concepts* graphify uses
