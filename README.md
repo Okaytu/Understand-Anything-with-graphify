@@ -9,27 +9,51 @@ knowledge graph" projects side by side, with their **full commit history preserv
 | [`graphify/`](graphify/) | **graphify**: deterministic tree-sitter extraction (~40 languages, no LLM) + CLI queries (`query` / `path` / `explain`), `GRAPH_REPORT.md`, many exporters | Python ≥ 3.10 · uv | Apache-2.0 ([LICENSE](graphify/LICENSE), [NOTICE](graphify/NOTICE)) | `Okaytu/graphify` @ `v8` |
 
 Each folder is the complete, unmodified project and builds and runs exactly as it does
-upstream. Each keeps its own license; nothing here relicenses either project. The new
-[`bridge/`](bridge/) folder connects them.
+upstream. Each keeps its own license; nothing here relicenses either project.
 
-## The bridge: map with graphify, explore in both viewers
+## Two ways to learn
+
+| | **1. Learn from what you have** | **2. Start from zero** |
+|---|---|---|
+| You begin with | an existing codebase | only a question, e.g. "how does a business work?" |
+| The graph comes from | the code, parsed by graphify (no LLM) | the linked notes you write as you learn |
+| It grows when | the code changes | you add a note |
+| What to learn next | the generated tour: core abstractions, then subsystems | `learn.py next`: ideas you linked but haven't written yet |
+| One command | `bridge/run.sh <project>` | `learn-from-zero/learn.sh <wiki>` |
+| Try it on | any project (e.g. `graphify/`) | [`learn-from-zero/examples/how-a-business-works`](learn-from-zero/examples/how-a-business-works) |
+
+Both open the **same two viewers** side by side:
+- **Understand-Anything dashboard:** `http://127.0.0.1:5173/?token=…` (layers, drill-down,
+  details panel, guided tour)
+- **graphify view:** `http://127.0.0.1:5174/graph.html` (force-directed graph coloured by
+  community, plus `GRAPH_REPORT.md`)
+
+Use `--view ua`, `--view graphify` or `--view none` to pick one or neither.
+
+**Start with [`notes/README.md`](notes/README.md):** the study guide for both paths, a
+reading order, exercises, and a head-to-head comparison of the two tools on the same commit.
+
+### 1. Learn from what you have: [`bridge/`](bridge/)
 
 ```bash
 bridge/run.sh /path/to/any/project
 ```
 
-1. **graphify** maps the project with tree-sitter (no LLM, free, local).
-2. The bridge converts graphify's graph into an Understand-Anything knowledge graph and
-   checks it with the dashboard's own validator.
-3. Both views open side by side:
-   - **graphify view:** `http://127.0.0.1:5174/graph.html`, a force-directed graph coloured
-     by community, plus `GRAPH_REPORT.md`.
-   - **Understand-Anything dashboard:** `http://127.0.0.1:5173/?token=…`, graphify's
-     communities as layers, file → class → function drill-down, code viewer, search and a
-     generated guided tour.
+graphify maps the project with tree-sitter (free, local), the bridge converts the result
+into an Understand-Anything knowledge graph and checks it with the dashboard's own
+validator, and both viewers open. `bridge/compare_graphs.py` compares that graph with one
+from `/understand`. See [`bridge/README.md`](bridge/README.md).
 
-Use `--view ua`, `--view graphify` or `--view none` to pick one or neither. See
-[`bridge/README.md`](bridge/README.md) for the full mapping, options and tests.
+### 2. Start from zero: [`learn-from-zero/`](learn-from-zero/)
+
+```bash
+python3 learn-from-zero/learn.py init ~/learning/my-topic "My topic"
+python3 learn-from-zero/learn.py new ~/learning/my-topic "First Idea" --category Foundations --link "Next Idea"
+learn-from-zero/learn.sh ~/learning/my-topic
+```
+
+Notes become a knowledge graph through Understand-Anything's own wiki parser (no LLM), and
+graphify maps them for the second view. See [`learn-from-zero/README.md`](learn-from-zero/README.md).
 
 ## Layout
 
@@ -37,8 +61,10 @@ Use `--view ua`, `--view graphify` or `--view none` to pick one or neither. See
 learn-code/
 ├── understand-anything/   ← full Understand-Anything project (git subtree)
 ├── graphify/              ← full graphify project (git subtree)
-├── bridge/                ← graphify → Understand-Anything converter + one-command runner
-├── .github/workflows/     ← one CI workflow that tests both projects
+├── bridge/                ← path 1: graphify → Understand-Anything converter, runner, viewer server, comparison
+├── learn-from-zero/       ← path 2: notes-wiki template, worked business example, learn.py / learn.sh
+├── notes/                 ← study guide, architecture notes, generated comparison report
+├── .github/workflows/     ← one CI workflow: both projects + bridge + learn-from-zero tests
 ├── .gitignore             ← shared ignores (node_modules, .venv, .ua/, graphify-out/, …)
 └── README.md
 ```
@@ -105,5 +131,5 @@ git subtree pull --prefix=graphify graphify-upstream v8
 
 Each project's own `.github/workflows/` folder is kept for reference, but GitHub only
 runs workflows from the repository root, so they are inactive here. The root
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs both test suites and the
-bridge tests instead.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs both test suites, plus the
+`bridge/` and `learn-from-zero/` tests, instead.

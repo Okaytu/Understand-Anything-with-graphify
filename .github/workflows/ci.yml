@@ -96,6 +96,6 @@ jobs:
 
       # Run from inside graphify/: at the repo root the graphify/ folder would
       # shadow the installed package.
-      - name: Test bridge (unit + end-to-end)
+      - name: Test bridge + learn-from-zero (unit + end-to-end)
         working-directory: graphify
-        run: uv run --frozen pytest ../bridge/tests -q --tb=short
+        run: uv run --frozen pytest ../bridge/tests ../learn-from-zero/tests -q --tb=short

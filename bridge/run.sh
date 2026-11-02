@@ -38,7 +38,6 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$PROJECT" ] || usage 2
 case "$VIEW" in both|ua|graphify|none) ;; *) echo "--view must be both, ua, graphify or none" >&2; exit 2 ;; esac
-GRAPHIFY_PORT=$((PORT + 1))
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 GRAPHIFY_DIR="$REPO_ROOT/graphify"
@@ -95,24 +94,5 @@ if [ "$VIEW" = none ]; then
   exit 0
 fi
 
-GRAPHIFY_PID=""
-cleanup() { [ -n "$GRAPHIFY_PID" ] && kill "$GRAPHIFY_PID" 2>/dev/null || true; }
-trap cleanup EXIT INT TERM
-
-if [ "$VIEW" = graphify ] || [ "$VIEW" = both ]; then
-  step "4/4 graphify view: http://127.0.0.1:$GRAPHIFY_PORT/graph.html  (report: /GRAPH_REPORT.md)"
-  # Bound to localhost only; serves just the graphify-out folder.
-  PY="$(cd "$GRAPHIFY_DIR" && uv run --quiet --frozen --project "$GRAPHIFY_DIR" python -c 'import sys; print(sys.executable)')"
-  "$PY" -m http.server "$GRAPHIFY_PORT" --bind 127.0.0.1 --directory "$OUT_DIR" >/dev/null 2>&1 &
-  GRAPHIFY_PID=$!
-fi
-
-if [ "$VIEW" = graphify ]; then
-  echo "Serving graphify's view. Ctrl+C to stop."
-  wait "$GRAPHIFY_PID"
-  exit 0
-fi
-
-step "4/4 Understand-Anything dashboard: open the 🔑 Dashboard URL printed below (Ctrl+C to stop both)"
-cd "$PLUGIN_DIR/packages/dashboard"
-GRAPH_DIR="$PROJECT_DIR" npx vite --host 127.0.0.1 --port "$PORT"
+step "4/4 viewers"
+exec "$REPO_ROOT/bridge/serve.sh" "$PROJECT_DIR" --view "$VIEW" --port "$PORT"

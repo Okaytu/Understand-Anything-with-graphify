@@ -85,10 +85,34 @@ one produced by `/understand`) unless you pass `--force` or choose another `--ou
 > `graphify/` folder shadows the installed package on Python's path. Run graphify commands
 > from inside `graphify/` (as `run.sh` does) or from your project's folder.
 
+## Comparing with an `/understand` graph
+
+```bash
+python3 bridge/compare_graphs.py <understand-graph.json> <bridge-graph.json> \
+        --project <source-dir> [--labels understand graphify] [--out report.md] [--json report.json]
+bridge/compare_demo.sh        # regenerates notes/comparison-report.md (same commit, both tools)
+```
+
+Inside the files both graphs cover, it compares:
+- files and symbols, reporting symbols found under another kind;
+- file dependencies (imports and re-exports together), each checked against the real
+  import/export lines, including workspace-package imports such as `@scope/core`;
+- calls, at symbol level (crediting class-level vs method-level differences) and file level;
+- whether each graph's line numbers point at the right line in the source;
+- layers, tour, summary length and language lessons.
+
+Findings and how to read them: [`notes/03-side-by-side.md`](../notes/03-side-by-side.md).
+
+## Viewers only
+
+`bridge/serve.sh <dir> [--view both|ua|graphify] [--port N]` serves an already-built
+`.ua/knowledge-graph.json` and `graphify-out/` without rebuilding. `run.sh` and
+`learn-from-zero/learn.sh` both end by calling it.
+
 ## Tests
 
 ```bash
-cd graphify && uv run pytest ../bridge/tests -q
+cd graphify && uv run pytest ../bridge/tests ../learn-from-zero/tests -q
 ```
 
 The unit tests cover type mapping, edge direction, confidence, layers, the tour and the
