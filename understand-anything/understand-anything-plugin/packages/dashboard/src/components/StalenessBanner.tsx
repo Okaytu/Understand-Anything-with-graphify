@@ -164,8 +164,25 @@ export function buildFreshnessBanner(
 export default function StalenessBanner({ freshness }: StalenessBannerProps) {
   const [expanded, setExpanded] = useState(false);
   const content = buildFreshnessBanner(freshness);
+  const foldKey = content ? `ua-banner-folded:${content.title}` : "";
+  const [, setFoldedTick] = useState(0);
 
   if (!content) return null;
+  try {
+    // folded once = hidden for good (until the banner's title changes)
+    if (localStorage.getItem(foldKey) === "1") return null;
+  } catch {
+    // storage unavailable: banner just stays visible
+  }
+
+  const fold = () => {
+    try {
+      localStorage.setItem(foldKey, "1");
+    } catch {
+      // storage unavailable: can't remember the fold
+    }
+    setFoldedTick((n) => n + 1);
+  };
 
   const hasFiles = content.changedFiles.length > 0;
   const visibleFiles = content.changedFiles.slice(0, 8);
@@ -173,11 +190,12 @@ export default function StalenessBanner({ freshness }: StalenessBannerProps) {
 
   return (
     <div className="bg-amber-950/30 border-b border-amber-700 text-amber-100 text-sm">
+      <div className="flex items-start">
       <button
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((prev) => !prev)}
-        className="w-full flex items-start gap-3 px-5 py-3 text-left hover:bg-amber-900/10 transition-colors"
+        className="flex-1 min-w-0 flex items-start gap-3 px-5 py-3 text-left hover:bg-amber-900/10 transition-colors"
       >
         <svg
           className="w-4 h-4 shrink-0 mt-0.5 text-amber-400"
@@ -203,6 +221,15 @@ export default function StalenessBanner({ freshness }: StalenessBannerProps) {
           </span>
         )}
       </button>
+      <button
+        type="button"
+        onClick={fold}
+        title="Fold this banner and don't show it again"
+        className="shrink-0 px-4 py-3 text-xs text-amber-300/70 hover:text-amber-100 transition-colors"
+      >
+        fold
+      </button>
+      </div>
 
       {expanded && hasFiles && (
         <div className="px-5 pb-3">
