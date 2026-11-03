@@ -14,6 +14,10 @@ This repository combines two open-source tools and adds the pieces that connect 
 
 It runs on your own computer; your files are not uploaded anywhere.
 
+> 🤖 **Have an AI coding agent (Claude Code, Codex, Cursor, …)?** Copy a ready-made prompt
+> from **[PROMPTS.md](PROMPTS.md)**, paste it into the agent, and it sets everything up and
+> walks you through it.
+
 ---
 
 ## Contents
@@ -28,6 +32,7 @@ It runs on your own computer; your files are not uploaded anywhere.
 8. [Optional: with an AI assistant](#8-optional-with-an-ai-assistant)
 9. [Troubleshooting](#9-troubleshooting)
 10. [For developers](#10-for-developers)
+    · Copy-paste prompts for AI coding agents: [PROMPTS.md](PROMPTS.md)
 11. [Credits and licenses](#11-credits-and-licenses)
 
 ---
@@ -282,7 +287,8 @@ Files** at the bottom to switch screens.
 
 ## 8. Optional: with an AI assistant
 
-Everything above works **without AI**. If you use an AI coding assistant such as
+Everything above works **without AI**. To let an AI coding agent do the steps for you,
+use the ready-made prompts in **[PROMPTS.md](PROMPTS.md)**. If you use an AI coding assistant such as
 [Claude Code](https://claude.com/claude-code), Understand Anything can also be installed as a
 plugin that adds AI-written explanations:
 
