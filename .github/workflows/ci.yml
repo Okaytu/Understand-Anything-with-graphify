@@ -52,6 +52,11 @@ jobs:
         working-directory: graphify
     steps:
       - uses: actions/checkout@v6
+        with:
+          # graphify's skillgen tests read baseline skill files from older commits
+          # with `git show <sha>:<path>`; a shallow checkout lacks them. graphify's
+          # own CI uses full history for the same reason.
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
