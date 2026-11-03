@@ -79,7 +79,7 @@ def test_export_lists_files_and_connections(project):
     assert set(st["files"]["missing"]) == {"pkg/main.py", "pkg/shapes.py"}
     assert "pkg/main.py -> pkg/shapes.py" in st["connections"]["missing"]
     assert enrich.main(["status", str(project), "--check"]) == 1
-    assert enrich.export(project, 20) == 0
+    assert enrich.export(project) == 0
     batch = json.loads((project / ".ua" / "enrich" / "batch-001.json").read_text())
     main_entry = next(f for f in batch["files"] if f["path"] == "pkg/main.py")
     conn = next(c for c in main_entry["connections"] if c["to"] == "pkg/shapes.py")
@@ -88,7 +88,7 @@ def test_export_lists_files_and_connections(project):
 
 
 def test_apply_writes_explanations_into_the_graph(project):
-    enrich.export(project, 20)
+    enrich.export(project)
     _answer_everything(project)
     assert enrich.apply(project) == 0
     assert enrich.main(["status", str(project), "--check"]) == 0
@@ -110,7 +110,7 @@ def test_apply_writes_explanations_into_the_graph(project):
 
 
 def test_rebuild_keeps_explanations_and_flags_changed_files(project):
-    enrich.export(project, 20)
+    enrich.export(project)
     _answer_everything(project)
     enrich.apply(project)
     (project / "pkg" / "shapes.py").write_text((project / "pkg" / "shapes.py").read_text() + "\n# changed\n")
@@ -124,14 +124,14 @@ def test_rebuild_keeps_explanations_and_flags_changed_files(project):
     assert st["files"]["missing"] == []
     assert graph["tour"][0]["title"] == "Start"
     # export only asks again for what changed
-    enrich.export(project, 20)
+    enrich.export(project)
     batch = json.loads((project / ".ua" / "enrich" / "batch-001.json").read_text())
     needs = [f["path"] for f in batch["files"] if f["needs_summary"]]
     assert needs == ["pkg/shapes.py"]
 
 
 def test_apply_rejects_unknown_keys_and_empty_text(project):
-    enrich.export(project, 20)
+    enrich.export(project)
     work = project / ".ua" / "enrich"
     batch = json.loads((work / "batch-001.json").read_text())
     Path(batch["answer_file"]).write_text(json.dumps({
@@ -147,3 +147,58 @@ def test_long_text_is_trimmed():
     assert len(enrich.clean_text("x" * 5000, enrich.MAX_WHY)) == enrich.MAX_WHY
     assert enrich.clean_text("  a   b ", 50) == "a b"
     assert enrich.clean_text(42, 50) is None
+
+
+# --- token savings: scope, digests, estimate ---------------------------------
+
+def test_scope_rules():
+    s = enrich.DEFAULT_SCOPE
+    assert not enrich.path_in_scope("tests/test_a.py", s)
+    assert not enrich.path_in_scope("src/a.test.ts", s)
+    assert not enrich.path_in_scope("dist/bundle.min.js", s)
+    assert not enrich.path_in_scope("docs/guide.md", s)
+    assert enrich.path_in_scope("README.md", s)
+    assert enrich.path_in_scope("src/contest.py", s)  # not a test just because of the name
+    assert enrich.path_in_scope("tests/test_a.py", {**s, "include_tests": True})
+    assert not enrich.path_in_scope("lib/x.py", {**s, "only": ["src"]})
+    assert enrich.path_in_scope("src/x.py", {**s, "only": ["src/"]})
+
+
+def test_digest_keeps_public_definitions_and_doc_comments(tmp_path):
+    body = ["import os", "from x import y", ""]
+    for i in range(200):
+        body += [f"def _helper_{i}(a):", "    return a", ""]
+    body += ["def public_api(x):", '    """Explains what public_api does."""', "    return x", ""]
+    src = "\n".join(body)
+    (tmp_path / "m.py").write_text(src)
+    lines = src.splitlines()
+    defs = [i + 1 for i, line in enumerate(lines) if line.startswith("def ")]
+    digest, whole = enrich.make_digest(tmp_path, "m.py", defs)
+    assert not whole and len(digest) < len(src)
+    assert "import os" in digest and "def public_api(x):" in digest
+    assert "Explains what public_api does." in digest
+    assert "more definitions not shown" in digest  # private helpers dropped first
+    (tmp_path / "small.py").write_text("def f():\n    return 1\n")
+    assert enrich.make_digest(tmp_path, "small.py", [1]) == ("def f():\n    return 1\n", True)
+
+
+def test_tests_are_skipped_by_default_and_can_be_included(project):
+    (project / "tests").mkdir()
+    (project / "tests" / "test_shapes.py").write_text("from pkg.shapes import Square\n\ndef test_area():\n    assert Square(2).area() == 4\n")
+    subprocess.run([sys.executable, "-m", "graphify", "update", str(project)], check=True, capture_output=True, cwd=project)
+    assert bridge.main([str(project)]) == 0
+    st = _status(project)
+    assert "tests/test_shapes.py" not in st["files"]["missing"] and st["files"]["skipped"] >= 1
+    enrich.export(project)
+    batch = json.loads((project / ".ua" / "enrich" / "batch-001.json").read_text())
+    assert all(not f["path"].startswith("tests/") for f in batch["files"])
+    assert all("digest" in f for f in batch["files"])
+    # opting in is remembered for status/apply
+    assert enrich.main(["export", str(project), "--include-tests"]) == 0
+    assert "tests/test_shapes.py" in _status(project)["files"]["missing"]
+
+
+def test_estimate_prints_costs(project, capsys):
+    assert enrich.main(["estimate", str(project)]) == 0
+    out = capsys.readouterr().out
+    assert "Reading:" in out and "Opus 5.5" in out and "Sonnet 5.5" in out

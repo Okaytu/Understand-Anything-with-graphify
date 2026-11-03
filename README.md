@@ -369,19 +369,26 @@ B. Map the code (graphify, no AI)
    The first run downloads dependencies and can take a few minutes. If it stops because a
    knowledge graph made by /understand already exists, ask me before adding --force.
 
-C. Explain everything (you write the explanations)
-5. Run `python3 TOOL/bridge/enrich.py export "PROJECT"`. It writes task files to
-   PROJECT/.ua/enrich/: batch-NNN.json (files and their connections) and project.json
-   (overview, groups and tour).
-6. For each task file: follow its "instructions", read every source file it lists, and write
-   valid JSON to its "answer_file":
-   - a plain-language summary of every file;
-   - one or two sentences on WHY each connection exists (its purpose, not just "it imports
-     it");
-   - the listed key symbols;
+C. Explain everything (you write the explanations, using as few tokens as possible)
+5. Run `python3 TOOL/bridge/enrich.py estimate "PROJECT"` and tell me its result in one line
+   (files to explain, tokens, cost per model). By default it skips tests, docs and generated
+   files. If I asked for them, add `--include-tests` or `--include-docs`; to explain only one
+   part, add `--only <folder>`. Then run `python3 TOOL/bridge/enrich.py export "PROJECT"` with
+   the same flags. It writes task files to PROJECT/.ua/enrich/: batch-NNN.json (files, their
+   connections, and a short "digest" of each file) and project.json (overview, groups, tour).
+6. For each task file: follow its "instructions" and write valid JSON to its "answer_file".
+   Work from the digests; open a source file only when its digest isn't enough. Keep it short:
+   - every file: 2 or 3 plain sentences;
+   - every connection: ONE sentence on WHY it exists (its purpose, not just "it imports it");
+   - every listed key symbol: one sentence;
    - for project.json: the overview, a meaningful name and description for every group, and
      a 6 to 12 step tour.
    Base everything on the actual code. Never invent.
+   To save tokens: if you can start subagents (in Claude Code, the Task/Agent tool), give each
+   task file to its own subagent, on a cheaper model such as Sonnet or Haiku when you can
+   choose one, up to 4 at a time, with this instruction: "Read <task file>, follow its
+   instructions, write its answer_file, then reply only: done". Don't read the task files
+   yourself. Without subagents, do the task files one by one.
 7. Run `python3 TOOL/bridge/enrich.py apply "PROJECT"`. It must print `valid:`. If it reports
    rejected entries, correct them and apply again.
 8. Repeat steps 5 to 7 until `python3 TOOL/bridge/enrich.py status "PROJECT" --check` prints
@@ -408,9 +415,14 @@ TOOL/README.md, fix what you safely can, and continue.
 
 </details>
 
-**Good to know:** the explaining in steps 5 to 8 uses your agent's own AI, so a large codebase
-takes a while and uses some of your agent's usage limits. graphify's map (step 4) costs
-nothing. Explanations are saved in `.ua/enrichments.json` in your project. Keep that file and
+**Good to know:** the explaining in steps 5 to 8 uses your agent's own AI. graphify's map
+(step 4) costs nothing. To keep the AI part small, the agent reads a short digest of each file
+(imports, signatures and doc comments) instead of the whole file, skips tests, docs and
+generated files, writes one sentence per connection, and hands each batch to a cheaper
+subagent. Step 5 shows the estimate first; to check it yourself, run
+`python3 bridge/enrich.py estimate /path/to/project`. As a rough guide, a project with about
+150 source files costs around $1.50 to $2.50 on Opus and about half that on Sonnet.
+Explanations are saved in `.ua/enrichments.json` in your project. Keep that file and
 a later refresh only explains what changed.
 
 ### ⭐ The one prompt for someone else's repository
@@ -444,19 +456,26 @@ B. Download and map the repository (graphify, no AI)
    means that path.
    Never run, build or install the downloaded project's own code: only read it.
 
-C. Explain everything (you write the explanations)
-4. Run `python3 TOOL/bridge/enrich.py export "PROJECT"`. It writes task files to
-   PROJECT/.ua/enrich/: batch-NNN.json (files and their connections) and project.json
-   (overview, groups and tour).
-5. For each task file: follow its "instructions", read every source file it lists, and write
-   valid JSON to its "answer_file":
-   - a plain-language summary of every file;
-   - one or two sentences on WHY each connection exists (its purpose, not just "it imports
-     it");
-   - the listed key symbols;
+C. Explain everything (you write the explanations, using as few tokens as possible)
+4. Run `python3 TOOL/bridge/enrich.py estimate "PROJECT"` and tell me its result in one line
+   (files to explain, tokens, cost per model). By default it skips tests, docs and generated
+   files. If I asked for them, add `--include-tests` or `--include-docs`; to explain only one
+   part, add `--only <folder>`. Then run `python3 TOOL/bridge/enrich.py export "PROJECT"` with
+   the same flags. It writes task files to PROJECT/.ua/enrich/: batch-NNN.json (files, their
+   connections, and a short "digest" of each file) and project.json (overview, groups, tour).
+5. For each task file: follow its "instructions" and write valid JSON to its "answer_file".
+   Work from the digests; open a source file only when its digest isn't enough. Keep it short:
+   - every file: 2 or 3 plain sentences;
+   - every connection: ONE sentence on WHY it exists (its purpose, not just "it imports it");
+   - every listed key symbol: one sentence;
    - for project.json: the overview, a meaningful name and description for every group, and
      a 6 to 12 step tour.
    Base everything on the actual code and the repository's README. Never invent.
+   To save tokens: if you can start subagents (in Claude Code, the Task/Agent tool), give each
+   task file to its own subagent, on a cheaper model such as Sonnet or Haiku when you can
+   choose one, up to 4 at a time, with this instruction: "Read <task file>, follow its
+   instructions, write its answer_file, then reply only: done". Don't read the task files
+   yourself. Without subagents, do the task files one by one.
 6. Run `python3 TOOL/bridge/enrich.py apply "PROJECT"`. It must print `valid:`. If it reports
    rejected entries, correct them and apply again.
 7. Repeat steps 4 to 6 until `python3 TOOL/bridge/enrich.py status "PROJECT" --check` prints
@@ -823,7 +842,7 @@ Understand Anything does not have it.
 bridge/run.sh <folder | repo-url | owner/repo> [--view both|ua|graphify|none] [--port N] [--force] [--branch B]
 learn-from-zero/learn.sh <notes> [--view both|ua|graphify|none] [--port N] [--force]
 bridge/serve.sh <dir> [--view both|ua|graphify] [--port N]      # viewers only, no rebuild
-python3 bridge/enrich.py {status|export|apply} <project>          # agent-written explanations
+python3 bridge/enrich.py {estimate|status|export|apply} <project> # agent-written explanations
 python3 bridge/compare_graphs.py <understand.json> <bridge.json> --project <src>
 bridge/compare_demo.sh                                            # regenerate notes/comparison-report.md
 python3 learn-from-zero/learn.py {init|new|next|build} …

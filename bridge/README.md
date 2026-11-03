@@ -98,10 +98,31 @@ one produced by `/understand`) unless you pass `--force` or choose another `--ou
 graphify finds *that* two files connect. `enrich.py` lets your coding agent write *why*:
 
 ```bash
-python3 bridge/enrich.py status <project> [--list] [--check]   # explained / missing / outdated
-python3 bridge/enrich.py export <project> [--batch-size 20]    # task batches → <project>/.ua/enrich/
-python3 bridge/enrich.py apply  <project>                      # merge answers, rebuild, validate
+python3 bridge/enrich.py estimate <project> [scope flags]      # files to explain, tokens, cost per model
+python3 bridge/enrich.py status   <project> [--list] [--check] # explained / missing / outdated / skipped
+python3 bridge/enrich.py export   <project> [scope flags]      # task batches → <project>/.ua/enrich/
+python3 bridge/enrich.py apply    <project>                    # merge answers, rebuild, validate
 ```
+
+**Built to use few tokens:**
+
+- **Digests, not whole files.** Each batch carries a short digest of every file: its opening
+  comment, imports, and each definition's doc comment and signature, public definitions first
+  (about 2,400 characters at most). Small files are included whole. The agent opens the real
+  file only when the digest isn't enough.
+- **Scope.** Tests, docs (except the README) and generated or vendored files (`dist/`,
+  `build/`, `node_modules/`, `*.min.js`, lock files…) are skipped by default and counted as
+  *skipped* in `status`. Scope flags: `--only src lib`, `--include-tests`, `--include-docs`,
+  `--include-generated`, `--explain-modules` (also explain links to external packages),
+  `--everything`, `--batch-size N`. The scope is remembered in `enrichments.json`.
+- **Short answers.** Files get 2–3 sentences, connections and symbols one sentence each.
+- **Batches sized by tokens** (about 9,000 each), so each one fits a small subagent. The
+  setup prompts ask Claude Code to hand every batch to its own subagent on a cheaper model
+  (Sonnet or Haiku) instead of reading them all in the main conversation.
+- **`estimate`** shows the reading tokens (digests vs whole files), writing tokens and a cost
+  for each Claude model before anything is spent. Measured: Understand-Anything's
+  `packages/core/src` needs about 77k reading tokens instead of 144k; graphify's own repo
+  about 143k instead of 1.56M.
 
 - **export** writes `batch-NNN.json`. Each lists files, with every outgoing connection
   (lifted to file → file, or file → external module, with "via" details such as
