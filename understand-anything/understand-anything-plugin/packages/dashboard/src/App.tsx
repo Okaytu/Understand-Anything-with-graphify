@@ -6,7 +6,7 @@ import GraphView from "./components/GraphView";
 import DomainGraphView from "./components/DomainGraphView";
 import KnowledgeGraphView from "./components/KnowledgeGraphView";
 import ObsidianGraphView from "./components/ObsidianGraphView";
-import ObsidianNotePanel from "./components/ObsidianNotePanel";
+import ObsidianSidebar from "./components/ObsidianSidebar";
 import SearchBar from "./components/SearchBar";
 import NodeInfo from "./components/NodeInfo";
 import LayerLegend from "./components/LayerLegend";
@@ -317,6 +317,15 @@ function DashboardContent({
   const domainGraph = useDashboardStore((s) => s.domainGraph);
   const layoutIssues = useDashboardStore((s) => s.layoutIssues);
   const isMobile = useIsMobile();
+  // Obsidian style: the sidebar can be hidden so the graph gets the whole width;
+  // below 1100px it slides over the graph instead of squeezing it.
+  const isNarrow = useIsMobile(1100);
+  const [obsSidebarOpen, setObsSidebarOpen] = useState(
+    () => typeof window === "undefined" || window.innerWidth >= 1100,
+  );
+  useEffect(() => {
+    if (selectedNodeId || tourActive) setObsSidebarOpen(true);
+  }, [selectedNodeId, tourActive]);
   const { t } = useI18n();
   const allIssues = useMemo(
     () => [...graphIssues, ...layoutIssues],
@@ -452,13 +461,19 @@ function DashboardContent({
   const obsidianActive = graphStyle === "obsidian" && viewMode !== "domain";
   const infoSidebarContent = (
     <>
-      {selectedNodeId && (obsidianActive ? <ObsidianNotePanel /> : <NodeInfo />)}
-      {isLearnMode && (
-        <Suspense fallback={null}>
-          <LearnPanel />
-        </Suspense>
+      {obsidianActive ? (
+        <ObsidianSidebar />
+      ) : (
+        <>
+          {selectedNodeId && <NodeInfo />}
+          {isLearnMode && (
+            <Suspense fallback={null}>
+              <LearnPanel />
+            </Suspense>
+          )}
+          {!selectedNodeId && !isLearnMode && <ProjectOverview />}
+        </>
       )}
-      {!selectedNodeId && !isLearnMode && <ProjectOverview />}
     </>
   );
 
@@ -479,6 +494,17 @@ function DashboardContent({
             {tab === "info" ? t.sidebar.info : t.sidebar.files}
           </button>
         ))}
+        {obsidianActive && (
+          <button
+            type="button"
+            onClick={() => setObsSidebarOpen(false)}
+            title={t.obsidian.toggleSidebar}
+            aria-label={t.obsidian.toggleSidebar}
+            className="shrink-0 w-7 h-7 rounded-md text-text-muted hover:text-text-primary hover:bg-elevated"
+          >
+            ⇥
+          </button>
+        )}
       </div>
       <div className="flex-1 min-h-0 overflow-auto">
         {sidebarTab === "files" ? <FileExplorer /> : infoSidebarContent}
@@ -504,9 +530,9 @@ function DashboardContent({
     <div className="h-screen w-screen flex flex-col bg-root text-text-primary noise-overlay">
       {/* Header */}
       <header className="flex items-center px-3 sm:px-5 py-3 bg-surface border-b border-border-subtle shrink-0 gap-2 sm:gap-4">
-        {/* Left — fixed */}
-        <div className="flex items-center gap-3 sm:gap-5 shrink-0 min-w-0">
-          <h1 className="font-heading text-base sm:text-lg text-text-primary tracking-wide truncate max-w-[160px] sm:max-w-[220px] lg:max-w-none">
+        {/* Left — shrinks and scrolls on narrow windows so the right-hand actions stay visible */}
+        <div className="flex items-center gap-3 sm:gap-5 min-w-0 overflow-x-auto scrollbar-hide">
+          <h1 className="font-heading text-base sm:text-lg text-text-primary tracking-wide truncate shrink-0 max-w-[160px] sm:max-w-[220px] lg:max-w-none">
             {graph?.project.name ?? t.common.appName}
           </h1>
           <div className="w-px h-5 bg-border-subtle hidden sm:block" />
@@ -730,15 +756,37 @@ function DashboardContent({
           ) : (
             <GraphView />
           )}
-          <div className="absolute top-3 right-3 text-sm text-text-muted/60 pointer-events-none select-none">
-            {t.common.pressKeyboard}
-          </div>
+          {obsidianActive ? (
+            <button
+              type="button"
+              onClick={() => setObsSidebarOpen((v) => !v)}
+              title={t.obsidian.toggleSidebar}
+              aria-label={t.obsidian.toggleSidebar}
+              aria-pressed={obsSidebarOpen}
+              className="absolute top-3 right-3 z-20 w-9 h-9 rounded-lg border border-white/10 bg-[#262626]/95 text-[#dadada] shadow-xl hover:bg-[#333]"
+            >
+              {obsSidebarOpen ? "⇥" : "⇤"}
+            </button>
+          ) : (
+            <div className="absolute top-3 right-3 text-sm text-text-muted/60 pointer-events-none select-none">
+              {t.common.pressKeyboard}
+            </div>
+          )}
         </div>
 
-        {/* Right sidebar — telescopes at narrower widths */}
-        <aside className="w-[260px] md:w-[300px] lg:w-[360px] shrink-0 bg-surface border-l border-border-subtle overflow-auto">
-          {sidebarContent}
-        </aside>
+        {/* Right sidebar — telescopes at narrower widths. In the Obsidian style it can be
+            hidden, and on narrow screens it overlays the graph instead of shrinking it. */}
+        {(!obsidianActive || obsSidebarOpen) && (
+          <aside
+            className={
+              obsidianActive && isNarrow
+                ? "absolute top-0 right-0 bottom-0 z-30 w-[min(360px,92%)] bg-surface border-l border-border-subtle overflow-auto shadow-2xl"
+                : "w-[260px] md:w-[300px] lg:w-[360px] shrink-0 bg-surface border-l border-border-subtle overflow-auto"
+            }
+          >
+            {sidebarContent}
+          </aside>
+        )}
 
         {/* Code viewer slide-up overlay (collapsed state) */}
         {codeViewerOpen && !codeViewerExpanded && (

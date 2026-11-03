@@ -42,6 +42,8 @@ export default function MobileDrawer({
   const domainGraph = useDashboardStore((s) => s.domainGraph);
   const viewMode = useDashboardStore((s) => s.viewMode);
   const setViewMode = useDashboardStore((s) => s.setViewMode);
+  const graphStyle = useDashboardStore((s) => s.graphStyle);
+  const setGraphStyle = useDashboardStore((s) => s.setGraphStyle);
   const nodeTypeFilters = useDashboardStore((s) => s.nodeTypeFilters);
   const toggleNodeTypeFilter = useDashboardStore((s) => s.toggleNodeTypeFilter);
   const { t } = useI18n();
@@ -139,6 +141,28 @@ export default function MobileDrawer({
             <SectionLabel>{t.drawer.role}</SectionLabel>
             <PersonaSelector />
           </section>
+
+          {graph && viewMode !== "domain" && (
+            <section>
+              <SectionLabel>{t.obsidian.graphStyle}</SectionLabel>
+              <div className="inline-flex items-center bg-elevated rounded-lg p-0.5">
+                {(["obsidian", "classic"] as const).map((style) => (
+                  <button
+                    key={style}
+                    type="button"
+                    onClick={() => setGraphStyle(style)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      graphStyle === style
+                        ? "bg-accent/20 text-accent"
+                        : "text-text-muted hover:text-text-secondary"
+                    }`}
+                  >
+                    {style === "obsidian" ? t.obsidian.obsidian : t.obsidian.classic}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           {showViewToggle && (
             <section>

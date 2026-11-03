@@ -26,8 +26,11 @@ Both open the **same two viewers** side by side:
 - **Understand-Anything dashboard:** `http://127.0.0.1:5173/?token=…`. It opens in an
   **Obsidian-style graph**: dots sized by connections, hover a dot to light up its neighbours
   and get a box of where it connects, click it to read it as a note with Links and
-  Backlinks. **Classic** (in the header) switches back to the original layers, drill-down
-  and cards. The tour and search work in both.
+  Backlinks. The sidebar is Obsidian-styled too: with nothing selected it shows the project
+  overview and the tour as a list; ⇥ hides it so the graph gets the full width (on narrow
+  screens it slides over the graph). On phones, tap a dot to pin its connection box, then
+  **Open note**. **Classic** (header, or the ☰ menu on phones) switches back to the
+  original layers, drill-down and cards. The tour and search work in both.
 - **graphify view:** `http://127.0.0.1:5174/graph.html` (force-directed graph coloured by
   community, plus `GRAPH_REPORT.md`)
 

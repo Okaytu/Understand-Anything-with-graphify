@@ -74,9 +74,14 @@ export default function ObsidianNotePanel() {
 
   if (!graph || !node || !conns) return null;
 
+  // Notes are real markdown. Code summaries are plain text full of paths like
+  // src/__tests__/x.ts, so escape the characters markdown would turn into bold/italics.
   const body = node.knowledgeMeta?.content
     ? stripTitle(node.knowledgeMeta.content, node.name)
-    : [node.summary, node.languageNotes].filter(Boolean).join("\n\n");
+    : [node.summary, node.languageNotes]
+        .filter(Boolean)
+        .map((s) => (s as string).replace(/([_*])/g, "\\$1"))
+        .join("\n\n");
 
   const components: Components = {
     a: ({ href, children }) => {

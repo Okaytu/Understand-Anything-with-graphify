@@ -1,0 +1,272 @@
+/**
+ * Sidebar for the Obsidian graph style (desktop sidebar and the mobile Info tab).
+ *
+ *   tour running       → ObsidianTourPanel (+ the selected note under it)
+ *   a dot selected     → ObsidianNotePanel
+ *   nothing selected   → ObsidianOverview: the project as a note — description,
+ *                        counts, the tour as a plain list, most-connected items, groups
+ */
+import { useMemo, type ReactNode } from "react";
+import ReactMarkdown from "react-markdown";
+import { useDashboardStore } from "../store";
+import { useI18n } from "../contexts/I18nContext";
+import ObsidianNotePanel from "./ObsidianNotePanel";
+import { groupColor } from "../utils/obsidian-graph";
+
+const LINK = "text-[#a882ff] hover:underline underline-offset-2";
+
+export default function ObsidianSidebar() {
+  const selectedNodeId = useDashboardStore((s) => s.selectedNodeId);
+  const tourActive = useDashboardStore((s) => s.tourActive);
+  if (tourActive) {
+    return (
+      <>
+        <ObsidianTourPanel />
+        {selectedNodeId && (
+          <div className="border-t border-border-subtle">
+            <ObsidianNotePanel />
+          </div>
+        )}
+      </>
+    );
+  }
+  return selectedNodeId ? <ObsidianNotePanel /> : <ObsidianOverview />;
+}
+
+function useSortedTour() {
+  const graph = useDashboardStore((s) => s.graph);
+  return useMemo(() => (graph ? [...graph.tour].sort((a, b) => a.order - b.order) : []), [graph]);
+}
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted mb-1.5">{children}</div>;
+}
+
+export function ObsidianOverview() {
+  const graph = useDashboardStore((s) => s.graph);
+  const selectNode = useDashboardStore((s) => s.selectNode);
+  const startTour = useDashboardStore((s) => s.startTour);
+  const setTourStep = useDashboardStore((s) => s.setTourStep);
+  const { t } = useI18n();
+  const o = t.obsidian;
+  const tour = useSortedTour();
+
+  const topNodes = useMemo(() => {
+    if (!graph) return [];
+    const degree = new Map<string, number>();
+    for (const e of graph.edges) {
+      if (e.type === "contains" || e.type === "categorized_under") continue;
+      degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
+      degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+    }
+    return graph.nodes
+      .filter((n) => n.type !== "topic" && n.type !== "module")
+      .map((n) => ({ node: n, degree: degree.get(n.id) ?? 0 }))
+      .filter((x) => x.degree > 0)
+      .sort((a, b) => b.degree - a.degree || a.node.name.localeCompare(b.node.name))
+      .slice(0, 8);
+  }, [graph]);
+
+  if (!graph) return null;
+  const isNotes = graph.nodes.some((n) => n.type === "article");
+  const mainCount = graph.nodes.filter((n) => (isNotes ? n.type === "article" : n.type === "file")).length;
+
+  const goStep = (i: number) => {
+    startTour();
+    if (i > 0) setTourStep(i);
+  };
+
+  return (
+    <div className="px-5 py-4 text-[14px] leading-relaxed text-text-secondary">
+      <h1 className="text-2xl font-semibold text-text-primary leading-tight break-words">{graph.project.name}</h1>
+      {graph.project.description && (
+        <p className="mt-2 text-[13px] text-text-muted">{graph.project.description}</p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
+        <span>
+          <b className="text-text-primary">{mainCount}</b> {isNotes ? o.notes : o.files}
+        </span>
+        <span>
+          <b className="text-text-primary">{graph.edges.length}</b> {o.lines}
+        </span>
+        <span>
+          <b className="text-text-primary">{graph.layers.length}</b> {o.groups.toLowerCase()}
+        </span>
+      </div>
+
+      {tour.length > 0 && (
+        <div className="mt-5 border-t border-border-subtle pt-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <SectionTitle>
+              {t.learnPanel.projectTour} <span className="text-text-muted/70">{tour.length}</span>
+            </SectionTitle>
+            <button
+              type="button"
+              onClick={() => goStep(0)}
+              className="rounded-md bg-[#a882ff]/15 px-2.5 py-1 text-xs text-[#c4a8ff] hover:bg-[#a882ff]/25"
+            >
+              {t.learnPanel.startTour} →
+            </button>
+          </div>
+          <ol className="space-y-0.5">
+            {tour.map((step, i) => (
+              <li key={`${step.order}-${step.title}`}>
+                <button
+                  type="button"
+                  onClick={() => goStep(i)}
+                  className="w-full text-left flex gap-2 rounded px-2 py-1 hover:bg-elevated"
+                >
+                  <span className="w-5 shrink-0 text-right text-text-muted/70 tabular-nums">{i + 1}.</span>
+                  <span className={LINK}>{step.title}</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {topNodes.length > 0 && (
+        <div className="mt-5 border-t border-border-subtle pt-3">
+          <SectionTitle>{o.mostConnected}</SectionTitle>
+          <ul className="space-y-0.5">
+            {topNodes.map(({ node, degree }) => (
+              <li key={node.id}>
+                <button
+                  type="button"
+                  onClick={() => selectNode(node.id)}
+                  className="w-full text-left flex items-baseline gap-2 rounded px-2 py-1 hover:bg-elevated"
+                >
+                  <span className={`${LINK} truncate`}>{node.name}</span>
+                  <span className="ml-auto shrink-0 text-[10px] text-text-muted">
+                    {degree} {o.links.toLowerCase()}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {graph.layers.length > 0 && (
+        <div className="mt-5 border-t border-border-subtle pt-3">
+          <SectionTitle>{o.groups}</SectionTitle>
+          <ul className="space-y-1">
+            {graph.layers.map((layer, i) => (
+              <li key={layer.id} className="flex items-center gap-2 px-2 text-[13px]">
+                <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: groupColor(i) }} />
+                <span className="truncate">{layer.name}</span>
+                <span className="ml-auto shrink-0 text-[10px] text-text-muted">{layer.nodeIds.length}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <p className="mt-5 text-[11px] text-text-muted/70">{o.hint}</p>
+    </div>
+  );
+}
+
+export function ObsidianTourPanel() {
+  const graph = useDashboardStore((s) => s.graph);
+  const current = useDashboardStore((s) => s.currentTourStep);
+  const nextTourStep = useDashboardStore((s) => s.nextTourStep);
+  const prevTourStep = useDashboardStore((s) => s.prevTourStep);
+  const setTourStep = useDashboardStore((s) => s.setTourStep);
+  const stopTour = useDashboardStore((s) => s.stopTour);
+  const selectNode = useDashboardStore((s) => s.selectNode);
+  const { t } = useI18n();
+  const tour = useSortedTour();
+  const step = tour[current];
+  if (!graph || !step) return null;
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const isLast = current === tour.length - 1;
+
+  return (
+    <div className="px-5 py-4 text-[14px] leading-relaxed text-text-secondary">
+      <div className="flex items-center justify-between text-xs text-text-muted">
+        <span className="uppercase tracking-wider">
+          {t.learnPanel.tour} · {current + 1} / {tour.length}
+        </span>
+        <button type="button" onClick={stopTour} className="hover:text-text-primary">
+          {t.learnPanel.exitTour} ×
+        </button>
+      </div>
+      <div className="mt-2 h-1 rounded bg-elevated overflow-hidden">
+        <div className="h-full bg-[#a882ff]" style={{ width: `${((current + 1) / tour.length) * 100}%` }} />
+      </div>
+
+      <h1 className="mt-4 text-xl font-semibold text-text-primary leading-tight">{step.title}</h1>
+      <div className="mt-2">
+        <ReactMarkdown
+          components={{
+            p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+            strong: ({ children }) => <strong className="font-semibold text-text-primary">{children}</strong>,
+            code: ({ children }) => <code className="bg-elevated rounded px-1 py-0.5 text-[12px] text-[#e6a96b]">{children}</code>,
+            ul: ({ children }) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
+          }}
+        >
+          {step.description}
+        </ReactMarkdown>
+      </div>
+
+      {step.languageLesson && (
+        <blockquote className="mt-3 border-l-2 border-[#a882ff]/60 pl-3 text-[13px] text-text-muted">
+          {step.languageLesson}
+        </blockquote>
+      )}
+
+      {step.nodeIds.length > 0 && (
+        <div className="mt-4 border-t border-border-subtle pt-3">
+          <ul className="space-y-0.5">
+            {step.nodeIds.map((id) => {
+              const n = byId.get(id);
+              if (!n) return null;
+              return (
+                <li key={id}>
+                  <button
+                    type="button"
+                    onClick={() => selectNode(id)}
+                    className="w-full text-left flex items-baseline gap-2 rounded px-2 py-1 hover:bg-elevated"
+                  >
+                    <span className={`${LINK} truncate`}>{n.name}</span>
+                    <span className="ml-auto shrink-0 text-[10px] text-text-muted">{n.type}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      <div className="mt-4 flex items-center gap-1.5">
+        {tour.map((s, i) => (
+          <button
+            key={`${s.order}-${s.title}`}
+            type="button"
+            onClick={() => setTourStep(i)}
+            aria-label={`${t.learnPanel.tour} ${i + 1}`}
+            className={`h-1.5 flex-1 rounded-full ${i === current ? "bg-[#a882ff]" : "bg-elevated hover:bg-[#a882ff]/40"}`}
+          />
+        ))}
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={prevTourStep}
+          disabled={current === 0}
+          className="flex-1 rounded-md bg-elevated py-1.5 text-xs text-text-secondary hover:bg-surface disabled:opacity-40"
+        >
+          ← {t.learnPanel.prev}
+        </button>
+        <button
+          type="button"
+          onClick={isLast ? stopTour : nextTourStep}
+          className="flex-1 rounded-md bg-[#a882ff]/15 py-1.5 text-xs text-[#c4a8ff] hover:bg-[#a882ff]/25"
+        >
+          {isLast ? t.learnPanel.finish : `${t.learnPanel.next} →`}
+        </button>
+      </div>
+    </div>
+  );
+}

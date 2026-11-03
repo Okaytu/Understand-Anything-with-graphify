@@ -51,7 +51,12 @@ interface View {
   k: number;
 }
 
-export default function ObsidianGraphView() {
+interface Props {
+  /** shown as an "Open note" button in the pinned box (mobile: switch to the Info tab) */
+  onOpenNote?: () => void;
+}
+
+export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
   const graph = useDashboardStore((s) => s.graph);
   const selectedNodeId = useDashboardStore((s) => s.selectedNodeId);
   const selectNode = useDashboardStore((s) => s.selectNode);
@@ -68,6 +73,7 @@ export default function ObsidianGraphView() {
   const viewRef = useRef<View>({ x: 0, y: 0, k: 1 });
   const sizeRef = useRef({ w: 800, h: 600 });
   const frameRef = useRef<number | null>(null);
+  const userMovedRef = useRef(false);
   const dragRef = useRef<{ node: SimNode | null; panning: boolean; moved: boolean; lastX: number; lastY: number }>({
     node: null,
     panning: false,
@@ -84,6 +90,10 @@ export default function ObsidianGraphView() {
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
+  // display settings start collapsed on small screens, like Obsidian's graph-settings gear
+  const [settingsOpen, setSettingsOpen] = useState(
+    () => typeof window === "undefined" || window.innerWidth >= 900,
+  );
 
   const obs = useMemo(
     () => (graph ? buildObsidianGraph(graph, { includeSymbols: includeSymbols && canShowSymbols }) : null),
@@ -279,6 +289,18 @@ export default function ObsidianGraphView() {
     requestDraw();
   }, [requestDraw]);
 
+  const zoomBy = useCallback(
+    (factor: number) => {
+      userMovedRef.current = true;
+      const { w, h } = sizeRef.current;
+      const v = viewRef.current;
+      const k = Math.min(8, Math.max(0.08, v.k * factor));
+      viewRef.current = { k, x: w / 2 - ((w / 2 - v.x) / v.k) * k, y: h / 2 - ((h / 2 - v.y) / v.k) * k };
+      requestDraw();
+    },
+    [requestDraw],
+  );
+
   const centerOn = useCallback(
     (id: string) => {
       const n = nodesRef.current.find((m) => m.id === id);
@@ -292,7 +314,6 @@ export default function ObsidianGraphView() {
   );
 
   // fit while the first layout settles, until the user pans/zooms/drags themselves
-  const userMovedRef = useRef(false);
   useEffect(() => {
     userMovedRef.current = false;
     const ids = [400, 1200, 3000].map((ms) =>
@@ -412,7 +433,7 @@ export default function ObsidianGraphView() {
   const boxPos = boxId
     ? hoverId
       ? { x: mouse.x + 16, y: mouse.y + 16 }
-      : { x: sizeRef.current.w - 300, y: 40 }
+      : { x: Math.max(12, sizeRef.current.w - 300), y: 56 }
     : null;
   const pinned = !hoverId && !!pinnedId;
 
@@ -453,9 +474,31 @@ export default function ObsidianGraphView() {
         role="img"
       />
 
-      {/* Graph settings, like Obsidian's graph-view panel */}
-      <div className="absolute top-3 left-3 w-52 rounded-lg border border-white/10 bg-[#262626]/95 p-3 text-xs text-[#dadada] shadow-xl space-y-2">
-        <div className="font-semibold text-[11px] uppercase tracking-wider text-[#999]">{o.display}</div>
+      {/* Graph settings, like Obsidian's graph-view panel (collapses to a gear) */}
+      {!settingsOpen && (
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          title={o.settings}
+          aria-label={o.settings}
+          className="absolute top-3 left-3 w-9 h-9 rounded-lg border border-white/10 bg-[#262626]/95 text-[#dadada] text-base shadow-xl hover:bg-[#333]"
+        >
+          ⚙
+        </button>
+      )}
+      {settingsOpen && (
+      <div className="absolute top-3 left-3 w-52 max-w-[calc(100%-24px)] rounded-lg border border-white/10 bg-[#262626]/95 p-3 text-xs text-[#dadada] shadow-xl space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="font-semibold text-[11px] uppercase tracking-wider text-[#999]">{o.display}</div>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(false)}
+            aria-label={o.close}
+            className="text-[#999] hover:text-white"
+          >
+            ×
+          </button>
+        </div>
         {canShowSymbols && (
           <Toggle label={o.symbols} checked={includeSymbols} onChange={setIncludeSymbols} />
         )}
@@ -483,19 +526,33 @@ export default function ObsidianGraphView() {
           </div>
         )}
       </div>
+      )}
 
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[11px] text-[#888] pointer-events-none">
+      {/* zoom controls (there is no pinch-zoom on touch screens yet) */}
+      <div className="absolute bottom-3 right-3 flex flex-col overflow-hidden rounded-lg border border-white/10 bg-[#262626]/95 text-[#dadada] shadow-xl">
+        <button type="button" onClick={() => zoomBy(1.3)} aria-label={o.zoomIn} className="w-9 h-9 hover:bg-[#333] text-lg">
+          +
+        </button>
+        <button type="button" onClick={() => zoomBy(1 / 1.3)} aria-label={o.zoomOut} className="w-9 h-9 hover:bg-[#333] text-lg border-t border-white/10">
+          −
+        </button>
+        <button type="button" onClick={fit} aria-label={o.fit} title={o.fit} className="w-9 h-9 hover:bg-[#333] border-t border-white/10">
+          ⤢
+        </button>
+      </div>
+
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[11px] text-[#888] pointer-events-none hidden md:block">
         {o.hint}
       </div>
 
       {/* "Where it connects" box */}
       {boxNode && boxConnections && boxPos && (
         <div
-          className={`absolute z-10 w-72 max-h-[60%] overflow-auto rounded-lg border bg-[#262626]/97 p-3 text-xs text-[#dadada] shadow-2xl ${
+          className={`absolute z-10 w-72 max-w-[calc(100%-24px)] max-h-[60%] overflow-auto rounded-lg border bg-[#262626]/97 p-3 text-xs text-[#dadada] shadow-2xl ${
             pinned ? "border-[#a882ff]/60 pointer-events-auto" : "border-white/10 pointer-events-none"
           }`}
           style={{
-            left: Math.min(boxPos.x, sizeRef.current.w - 300),
+            left: Math.max(12, Math.min(boxPos.x, sizeRef.current.w - 300)),
             top: Math.max(8, Math.min(boxPos.y, sizeRef.current.h - 240)),
           }}
         >
@@ -542,6 +599,15 @@ export default function ObsidianGraphView() {
             onGo={go}
             moreLabel={o.more}
           />
+          {pinned && onOpenNote && (
+            <button
+              type="button"
+              onClick={onOpenNote}
+              className="mt-3 w-full rounded-md bg-[#a882ff]/20 py-1.5 text-[#d6c4ff] hover:bg-[#a882ff]/30"
+            >
+              {o.openNote} →
+            </button>
+          )}
           {!pinned && <div className="mt-2 text-[10px] text-[#888]">{o.clickToPin}</div>}
         </div>
       )}

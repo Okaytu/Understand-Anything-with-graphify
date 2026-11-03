@@ -5,6 +5,8 @@ import { useI18n } from "../contexts/I18nContext";
 import GraphView from "./GraphView";
 import DomainGraphView from "./DomainGraphView";
 import KnowledgeGraphView from "./KnowledgeGraphView";
+import ObsidianGraphView from "./ObsidianGraphView";
+import ObsidianSidebar from "./ObsidianSidebar";
 import SearchBar from "./SearchBar";
 import NodeInfo from "./NodeInfo";
 import ProjectOverview from "./ProjectOverview";
@@ -45,6 +47,8 @@ export default function MobileLayout({
   const tourActive = useDashboardStore((s) => s.tourActive);
   const persona = useDashboardStore((s) => s.persona);
   const viewMode = useDashboardStore((s) => s.viewMode);
+  const graphStyle = useDashboardStore((s) => s.graphStyle);
+  const obsidianActive = graphStyle === "obsidian" && viewMode !== "domain";
   const domainGraph = useDashboardStore((s) => s.domainGraph);
   const codeViewerOpen = useDashboardStore((s) => s.codeViewerOpen);
   const closeCodeViewer = useDashboardStore((s) => s.closeCodeViewer);
@@ -58,9 +62,11 @@ export default function MobileLayout({
 
   // Auto-pivot to Info when a node is selected — keeps feedback visible
   // on a small screen where graph and sidebar can't coexist
+  // (Obsidian style: a tap pins the connection box on the graph instead, and its
+  // "Open note" button switches to Info.)
   useEffect(() => {
-    if (selectedNodeId) setActiveTab("info");
-  }, [selectedNodeId]);
+    if (selectedNodeId && !obsidianActive) setActiveTab("info");
+  }, [selectedNodeId, obsidianActive]);
 
   // When a code viewer opens (e.g. from the Files tab) keep focus there
   useEffect(() => {
@@ -68,7 +74,9 @@ export default function MobileLayout({
   }, [codeViewerOpen]);
 
   const isLearnMode = tourActive || persona === "junior";
-  const infoContent = (
+  const infoContent = obsidianActive ? (
+    <ObsidianSidebar />
+  ) : (
     <>
       {selectedNodeId && <NodeInfo />}
       {isLearnMode && (
@@ -159,7 +167,9 @@ export default function MobileLayout({
           }`}
           aria-hidden={activeTab !== "graph"}
         >
-          {viewMode === "knowledge" ? (
+          {obsidianActive ? (
+            <ObsidianGraphView onOpenNote={() => setActiveTab("info")} />
+          ) : viewMode === "knowledge" ? (
             <KnowledgeGraphView />
           ) : viewMode === "domain" && domainGraph ? (
             <DomainGraphView />
