@@ -6,8 +6,11 @@ import {
   childrenOf,
   connectionsOf,
   edgeLabel,
+  explanationOf,
+  fileConnectionsOf,
   groupColor,
   hasSymbols,
+  isFileNode,
   nodeRadius,
   splitWikilinks,
 } from "../obsidian-graph";
@@ -141,5 +144,39 @@ describe("styling helpers", () => {
   });
   it("labels edge types", () => {
     expect(edgeLabel(["imports", "depends_on"])).toBe("imports, depends on");
+  });
+});
+
+describe("explained connections", () => {
+  const g: KnowledgeGraph = {
+    ...codeGraph,
+    edges: [
+      ...codeGraph.edges,
+      { source: "fn:run", target: "fn:helper", type: "calls", direction: "forward", weight: 1, description: "run() hands the work to helper() in b.ts" } as KnowledgeGraph["edges"][number],
+      { source: "f:a", target: "f:b", type: "related", direction: "forward", weight: 1, description: "graphify: related · EXTRACTED" } as KnowledgeGraph["edges"][number],
+    ],
+  };
+
+  it("treats generated graphify labels as no explanation", () => {
+    expect(explanationOf({ description: "graphify: imports · EXTRACTED" })).toBeUndefined();
+    expect(explanationOf({ description: "  " })).toBeUndefined();
+    expect(explanationOf({ description: "Because X" })).toBe("Because X");
+  });
+
+  it("groups a file's connections by the other file, with why and via", () => {
+    expect(isFileNode(g.nodes.find((n) => n.id === "f:a")!)).toBe(true);
+    const c = fileConnectionsOf(g, "f:a");
+    const b = c.outgoing.find((x) => x.nodeId === "f:b")!;
+    expect(b.edgeTypes.sort()).toEqual(["calls", "imports", "related"]);
+    expect(b.why).toBe("run() hands the work to helper() in b.ts");
+    expect(b.via).toContain("helper");
+    expect(c.outgoing.some((x) => x.nodeId === "fn:helper")).toBe(false); // lifted to its file
+    expect(fileConnectionsOf(g, "f:b").incoming.map((x) => x.nodeId)).toEqual(["f:a"]);
+    expect(fileConnectionsOf(g, "f:b").outgoing.map((x) => x.nodeId)).toEqual(["m:lodash"]);
+  });
+
+  it("carries the explanation on direct connections too", () => {
+    const out = connectionsOf(g, "fn:run").outgoing;
+    expect(out.find((x) => x.nodeId === "fn:helper")?.why).toBe("run() hands the work to helper() in b.ts");
   });
 });

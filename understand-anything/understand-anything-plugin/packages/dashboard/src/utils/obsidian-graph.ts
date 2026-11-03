@@ -127,6 +127,17 @@ export interface Connection {
   file?: string;
   /** distinct edge types between the two nodes in this direction */
   edgeTypes: string[];
+  /** a written explanation of WHY they connect (e.g. from bridge/enrich.py), if any */
+  why?: string;
+  /** for file-level connections: the functions/classes/imports that make up the link */
+  via?: string[];
+}
+
+/** Edge descriptions the bridge generates ("graphify: imports · EXTRACTED") are labels, not explanations. */
+export function explanationOf(edge: Pick<GraphEdge, "description">): string | undefined {
+  const d = edge.description?.trim();
+  if (!d || d.startsWith("graphify:")) return undefined;
+  return d;
 }
 
 /** "src/a/b.ts" → "b.ts" — shown next to symbols so you know which file they live in. */
@@ -150,8 +161,10 @@ export function connectionsOf(graph: KnowledgeGraph, nodeId: string, opts?: { sk
   const add = (bucket: Map<string, Connection>, other: GraphNode | undefined, e: GraphEdge) => {
     if (!other) return;
     const c = bucket.get(other.id);
+    const why = explanationOf(e);
     if (c) {
       if (!c.edgeTypes.includes(e.type)) c.edgeTypes.push(e.type);
+      if (!c.why && why) c.why = why;
     } else {
       bucket.set(other.id, {
         nodeId: other.id,
@@ -159,6 +172,7 @@ export function connectionsOf(graph: KnowledgeGraph, nodeId: string, opts?: { sk
         type: other.type,
         file: fileLabel(other),
         edgeTypes: [e.type],
+        ...(why ? { why } : {}),
       });
     }
   };
@@ -171,6 +185,58 @@ export function connectionsOf(graph: KnowledgeGraph, nodeId: string, opts?: { sk
       add(e.direction === "backward" ? out : inc, byId.get(e.source), e);
       if (e.direction === "bidirectional") add(out, byId.get(e.source), e);
     }
+  }
+  const sort = (m: Map<string, Connection>) =>
+    [...m.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  return { outgoing: sort(out), incoming: sort(inc) };
+}
+
+const FILE_LIKE = new Set(["file", "config", "document"]);
+
+export function isFileNode(node: Pick<GraphNode, "type" | "lineRange">): boolean {
+  return FILE_LIKE.has(node.type) && !node.lineRange;
+}
+
+/**
+ * Connections of a FILE, grouped by the other file (or external module): every
+ * function/class/constant is lifted to the file it lives in, so "a.ts calls b.ts:foo()"
+ * and "a.ts imports b.ts" become one entry "b.ts — via foo(), imports" carrying the
+ * explanation of why the two files connect.
+ */
+export function fileConnectionsOf(graph: KnowledgeGraph, fileId: string): Connections {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const fileByPath = new Map<string, GraphNode>();
+  for (const n of graph.nodes) {
+    if (isFileNode(n) && n.filePath && !fileByPath.has(n.filePath)) fileByPath.set(n.filePath, n);
+  }
+  const lift = (id: string): GraphNode | undefined => {
+    const n = byId.get(id);
+    if (!n) return undefined;
+    if (isFileNode(n)) return n;
+    return (n.filePath && fileByPath.get(n.filePath)) || n;
+  };
+  const out = new Map<string, Connection>();
+  const inc = new Map<string, Connection>();
+  const add = (bucket: Map<string, Connection>, other: GraphNode, e: GraphEdge, viaNode: GraphNode | undefined) => {
+    let c = bucket.get(other.id);
+    if (!c) {
+      c = { nodeId: other.id, name: other.name, type: other.type, edgeTypes: [], via: [] };
+      bucket.set(other.id, c);
+    }
+    if (!c.edgeTypes.includes(e.type)) c.edgeTypes.push(e.type);
+    const why = explanationOf(e);
+    if (!c.why && why) c.why = why;
+    if (viaNode && viaNode.id !== other.id && c.via!.length < 6 && !c.via!.includes(viaNode.name)) {
+      c.via!.push(viaNode.name);
+    }
+  };
+  for (const e of graph.edges) {
+    if (e.type === "contains") continue;
+    const s = lift(e.source);
+    const t = lift(e.target);
+    if (!s || !t || s.id === t.id) continue;
+    if (s.id === fileId) add(out, t, e, byId.get(e.target));
+    else if (t.id === fileId) add(inc, s, e, byId.get(e.source));
   }
   const sort = (m: Map<string, Connection>) =>
     [...m.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));

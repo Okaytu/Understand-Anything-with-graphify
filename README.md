@@ -14,9 +14,9 @@ This repository combines two open-source tools and adds the pieces that connect 
 
 It runs on your own computer; your files are not uploaded anywhere.
 
-> 🤖 **Have an AI coding agent (Claude Code, Codex, Cursor, …)?** Jump to
-> **[copy-paste prompts](#8-let-an-ai-coding-agent-do-it-copy-paste-prompts)**: paste one into
-> the agent and it sets everything up and walks you through it.
+> 🤖 **Have an AI coding agent (Claude Code, Codex, Cursor, …)?** Open it in your project and
+> paste **[the one setup prompt](#-the-one-prompt-set-up-my-codebase)**: it maps your code,
+> explains every file and every connection, and opens the dashboard.
 
 ---
 
@@ -296,6 +296,83 @@ checks your tools (asking before it installs anything), runs the commands, check
 result, and explains it in plain language. It never edits your own project's files, and it
 never commits or pushes by itself.
 
+### ⭐ The one prompt: set up my codebase
+
+Open your coding agent **inside your own project folder**, paste this, and wait. It maps
+every file with graphify, then **your agent reads your code and explains every file and
+every connection** in plain language (the Understand-Anything way), and opens the
+dashboard. No other prompt is needed.
+
+<details open>
+<summary><b>Copy this prompt</b></summary>
+
+```text
+Set up "Understand Anything with graphify" (https://github.com/Okaytu/Understand-Anything-with-graphify)
+for THIS codebase (the current folder), so its interactive dashboard maps every file and
+explains every connection in plain language. Do every step without asking me, except before
+installing software system-wide. Tell me what you're doing in short, plain sentences.
+
+A. Get the tool
+1. If ~/Understand-Anything-with-graphify exists, run
+   `git -C ~/Understand-Anything-with-graphify pull --ff-only`; otherwise clone the repository
+   there. Below, TOOL means that folder and PROJECT means this codebase (use absolute paths).
+2. Check git, node (22 or newer), pnpm (10 or newer), uv and python3 (3.10 or newer).
+   TOOL/README.md section 3 shows how to install them. If one is missing, tell me which one
+   and ask before installing it.
+
+B. Map the code (graphify, no AI)
+3. If PROJECT is a git repository, make sure its .gitignore contains the line `graphify-out/`
+   (create the file if needed). Change nothing else in PROJECT.
+4. Run `TOOL/bridge/run.sh "PROJECT" --view none`. It must print a line starting with `valid:`.
+   The first run downloads dependencies and can take a few minutes. If it stops because a
+   knowledge graph made by /understand already exists, ask me before adding --force.
+
+C. Explain everything (you write the explanations)
+5. Run `python3 TOOL/bridge/enrich.py export "PROJECT"`. It writes task files to
+   PROJECT/.ua/enrich/: batch-NNN.json (files and their connections) and project.json
+   (overview, groups and tour).
+6. For each task file: follow its "instructions", read every source file it lists, and write
+   valid JSON to its "answer_file":
+   - a plain-language summary of every file;
+   - one or two sentences on WHY each connection exists (its purpose, not just "it imports
+     it");
+   - the listed key symbols;
+   - for project.json: the overview, a meaningful name and description for every group, and
+     a 6 to 12 step tour.
+   Base everything on the actual code. Never invent.
+7. Run `python3 TOOL/bridge/enrich.py apply "PROJECT"`. It must print `valid:`. If it reports
+   rejected entries, correct them and apply again.
+8. Repeat steps 5 to 7 until `python3 TOOL/bridge/enrich.py status "PROJECT" --check` prints
+   COMPLETE and exits with 0. A big codebase needs many batches: keep going until it is
+   complete, and after each round tell me the progress (e.g. "120/340 files, 410/1200
+   connections").
+
+D. Open it
+9. Start the viewers in the background: `TOOL/bridge/serve.sh "PROJECT"`. Give me the full
+   `🔑 Dashboard URL` link, including `?token=...`, and http://127.0.0.1:5174/graph.html.
+   If you can't keep a background process running, give me that command to run myself.
+10. Finish with:
+    - what the project is, in 3 sentences;
+    - its main groups;
+    - which file to start reading;
+    - how to refresh after code changes: run steps 4 to 8 again. Existing explanations are
+      kept, and only new or changed files need explaining.
+
+Rules: never edit PROJECT's source files. The only things you add to PROJECT are graphify-out/,
+.ua/ (its .ua/enrichments.json holds your explanations) and the .gitignore line. Don't commit
+or push anything. If a step fails, read the error and the "Troubleshooting" table in
+TOOL/README.md, fix what you safely can, and continue.
+```
+
+</details>
+
+**Good to know:** the explaining in steps 5 to 8 uses your agent's own AI, so a large codebase
+takes a while and uses some of your agent's usage limits. graphify's map (step 4) costs
+nothing. Explanations are saved in `.ua/enrichments.json` in your project. Keep that file and
+a later refresh only explains what changed.
+
+### More prompts for specific jobs
+
 | # | Prompt | Use it when |
 |---|---|---|
 | 1 | Set up and show me the example | the first time |
@@ -306,7 +383,7 @@ never commits or pushes by itself.
 | 6 | Something isn't working | a command failed |
 | 7 | Update from upstream (developers) | you want the latest graphify / Understand Anything |
 
-<details open>
+<details>
 <summary><b>Prompt 1: Set up and show me the example</b></summary>
 
 ```text
@@ -632,6 +709,7 @@ Understand Anything does not have it.
 bridge/run.sh <project> [--view both|ua|graphify|none] [--port N] [--force]
 learn-from-zero/learn.sh <notes> [--view both|ua|graphify|none] [--port N] [--force]
 bridge/serve.sh <dir> [--view both|ua|graphify] [--port N]      # viewers only, no rebuild
+python3 bridge/enrich.py {status|export|apply} <project>          # agent-written explanations
 python3 bridge/compare_graphs.py <understand.json> <bridge.json> --project <src>
 bridge/compare_demo.sh                                            # regenerate notes/comparison-report.md
 python3 learn-from-zero/learn.py {init|new|next|build} …

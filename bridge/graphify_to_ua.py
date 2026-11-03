@@ -618,6 +618,17 @@ def main(argv: list[str] | None = None) -> int:
 
     data = load_graphify_graph(graph_path)
     graph = convert(data, project_name=args.name or project.name, git_commit=_git_commit(project))
+    # Re-apply explanations a coding agent wrote earlier with bridge/enrich.py, so a
+    # rebuild after code changes keeps them (changed files get flagged as outdated).
+    enrich_file = out_path.parent / "enrichments.json"
+    if enrich_file.is_file():
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import enrich  # noqa: PLC0415  (same folder; optional feature)
+
+        enrichments = enrich.load_json(enrich_file, None)
+        if isinstance(enrichments, dict):
+            enrich.apply_enrichments(graph, enrichments, project)
+            print(f"  re-applied explanations from {enrich_file}")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = out_path.with_suffix(out_path.suffix + ".tmp")
     tmp.write_text(json.dumps(graph, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

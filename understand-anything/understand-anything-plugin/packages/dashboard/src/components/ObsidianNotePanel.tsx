@@ -16,6 +16,8 @@ import {
   buildNameIndex,
   childrenOf,
   connectionsOf,
+  fileConnectionsOf,
+  isFileNode,
   edgeLabel,
   splitWikilinks,
   type Connection,
@@ -58,7 +60,12 @@ export default function ObsidianNotePanel() {
   const node = useMemo(() => graph?.nodes.find((n) => n.id === selectedNodeId), [graph, selectedNodeId]);
   const nameIndex = useMemo(() => (graph ? buildNameIndex(graph) : new Map<string, string>()), [graph]);
   const conns = useMemo(
-    () => (graph && node ? connectionsOf(graph, node.id, { skipContains: true }) : null),
+    () =>
+      graph && node
+        ? isFileNode(node)
+          ? fileConnectionsOf(graph, node.id)
+          : connectionsOf(graph, node.id, { skipContains: true })
+        : null,
     [graph, node],
   );
   const defined = useMemo(() => (graph && node ? childrenOf(graph, node.id) : []), [graph, node]);
@@ -182,14 +189,6 @@ export default function ObsidianNotePanel() {
         </ReactMarkdown>
       </div>
 
-      {defined.length > 0 && (
-        <Section title={o.defined} count={defined.length}>
-          {defined.map((c) => (
-            <Item key={c.id} name={c.name} meta={c.type} onClick={() => selectNode(c.id)} />
-          ))}
-        </Section>
-      )}
-
       <Section title={o.links} count={conns.outgoing.length} empty={o.noLinks}>
         {conns.outgoing.map((c) => (
           <ConnItem key={c.nodeId} c={c} onClick={() => selectNode(c.nodeId)} />
@@ -201,6 +200,14 @@ export default function ObsidianNotePanel() {
           <ConnItem key={c.nodeId} c={c} onClick={() => selectNode(c.nodeId)} />
         ))}
       </Section>
+
+      {defined.length > 0 && (
+        <Section title={o.defined} count={defined.length}>
+          {defined.map((c) => (
+            <Item key={c.id} name={c.name} meta={c.type} onClick={() => selectNode(c.id)} />
+          ))}
+        </Section>
+      )}
 
       {unwritten.length > 0 && (
         <Section title={o.unwritten} count={unwritten.length}>
@@ -240,22 +247,38 @@ function Section({
   );
 }
 
-function Item({ name, file, meta, onClick }: { name: string; file?: string; meta: string; onClick: () => void }) {
+function Item({
+  name,
+  file,
+  meta,
+  why,
+  via,
+  onClick,
+}: {
+  name: string;
+  file?: string;
+  meta: string;
+  why?: string;
+  via?: string[];
+  onClick: () => void;
+}) {
   return (
     <li>
-      <button
-        type="button"
-        onClick={onClick}
-        className="w-full text-left flex items-baseline gap-2 rounded px-2 py-1 hover:bg-elevated"
-      >
-        <span className={`${LINK_COLOR} truncate`}>{name}</span>
-        {file && <span className="shrink-0 text-[10px] text-text-muted/70">{file}</span>}
-        <span className="ml-auto shrink-0 text-[10px] text-text-muted">{meta}</span>
+      <button type="button" onClick={onClick} className="w-full text-left rounded px-2 py-1 hover:bg-elevated">
+        <span className="flex items-baseline gap-2">
+          <span className={`${LINK_COLOR} truncate`}>{name}</span>
+          {file && <span className="shrink-0 text-[10px] text-text-muted/70">{file}</span>}
+          <span className="ml-auto shrink-0 text-[10px] text-text-muted">{meta}</span>
+        </span>
+        {why && <span className="block text-[12px] leading-snug text-text-secondary mt-0.5">{why}</span>}
+        {via && via.length > 0 && (
+          <span className="block text-[10px] text-text-muted/70 mt-0.5 truncate">via {via.join(", ")}</span>
+        )}
       </button>
     </li>
   );
 }
 
 function ConnItem({ c, onClick }: { c: Connection; onClick: () => void }) {
-  return <Item name={c.name} file={c.file} meta={edgeLabel(c.edgeTypes)} onClick={onClick} />;
+  return <Item name={c.name} file={c.file} meta={edgeLabel(c.edgeTypes)} why={c.why} via={c.via} onClick={onClick} />;
 }

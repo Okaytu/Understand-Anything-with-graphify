@@ -28,6 +28,9 @@ import { useI18n } from "../contexts/I18nContext";
 import {
   buildObsidianGraph,
   connectionsOf,
+  fileConnectionsOf,
+  isFileNode,
+  type Connection,
   edgeLabel,
   groupColor,
   hasSymbols,
@@ -492,7 +495,12 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
   const boxId = hoverId ?? pinnedId;
   const boxNode = boxId ? graph?.nodes.find((n) => n.id === boxId) : undefined;
   const boxConnections = useMemo(
-    () => (graph && boxId ? connectionsOf(graph, boxId, { skipContains: true }) : null),
+    () => {
+      if (!graph || !boxId) return null;
+      const n = graph.nodes.find((m) => m.id === boxId);
+      // files: group by the other file and carry the "why"; symbols/notes: direct links
+      return n && isFileNode(n) ? fileConnectionsOf(graph, boxId) : connectionsOf(graph, boxId, { skipContains: true });
+    },
     [graph, boxId],
   );
   // Hover box follows the cursor; the pinned box docks top-right so panning never hides it.
@@ -710,7 +718,7 @@ function ConnList({
 }: {
   title: string;
   arrow: string;
-  items: { nodeId: string; name: string; type: string; file?: string; edgeTypes: string[] }[];
+  items: Connection[];
   pinned: boolean;
   onGo: (id: string) => void;
   moreLabel: string;
@@ -729,14 +737,24 @@ function ConnList({
               type="button"
               disabled={!pinned}
               onClick={() => onGo(c.nodeId)}
-              className={`w-full text-left flex items-baseline gap-1.5 rounded px-1 py-0.5 ${
+              className={`w-full text-left rounded px-1 py-0.5 ${
                 pinned ? "hover:bg-white/10 cursor-pointer" : "cursor-default"
               }`}
             >
-              <span className="text-[#a882ff]">{arrow}</span>
-              <span className="truncate text-[#e6e6e6]">{c.name}</span>
-              {c.file && <span className="shrink-0 text-[10px] text-[#777]">{c.file}</span>}
-              <span className="ml-auto shrink-0 text-[10px] text-[#888]">{edgeLabel(c.edgeTypes)}</span>
+              <span className="flex items-baseline gap-1.5">
+                <span className="text-[#a882ff]">{arrow}</span>
+                <span className="truncate text-[#e6e6e6]">{c.name}</span>
+                {c.file && <span className="shrink-0 text-[10px] text-[#777]">{c.file}</span>}
+                <span className="ml-auto shrink-0 text-[10px] text-[#888]">{edgeLabel(c.edgeTypes)}</span>
+              </span>
+              {c.why && (
+                <span className={`block pl-4 text-[11px] leading-snug text-[#b9b9b9] ${pinned ? "" : "line-clamp-1"}`}>
+                  {c.why}
+                </span>
+              )}
+              {pinned && c.via && c.via.length > 0 && (
+                <span className="block pl-4 text-[10px] text-[#777] truncate">via {c.via.join(", ")}</span>
+              )}
             </button>
           </li>
         ))}

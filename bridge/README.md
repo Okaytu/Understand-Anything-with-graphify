@@ -85,6 +85,35 @@ one produced by `/understand`) unless you pass `--force` or choose another `--ou
 > `graphify/` folder shadows the installed package on Python's path. Run graphify commands
 > from inside `graphify/` (as `run.sh` does) or from your project's folder.
 
+## Explaining every file and connection (`enrich.py`)
+
+graphify finds *that* two files connect. `enrich.py` lets your coding agent write *why*:
+
+```bash
+python3 bridge/enrich.py status <project> [--list] [--check]   # explained / missing / outdated
+python3 bridge/enrich.py export <project> [--batch-size 20]    # task batches → <project>/.ua/enrich/
+python3 bridge/enrich.py apply  <project>                      # merge answers, rebuild, validate
+```
+
+- **export** writes `batch-NNN.json`. Each lists files, with every outgoing connection
+  (lifted to file → file, or file → external module, with "via" details such as
+  `loadGraph() calls validateGraph()`) and the most-used symbols. Each batch names the
+  `answer_file` the agent must write. `project.json` asks for an overview, a meaningful name
+  for every group (layer) and a written tour.
+- **apply** accepts only keys that were in the batches, trims overlong text, stores everything
+  in `<project>/.ua/enrichments.json` (keyed by file path, with a hash of each file's
+  contents), writes it into the knowledge graph, and validates the result:
+  - file summaries become node summaries (tagged `explained`);
+  - each connection's "why" becomes the description of every edge between the two files;
+  - group names and the tour replace the generated ones.
+- **Rebuilds keep it:** `bridge/run.sh` re-applies `enrichments.json` after every graphify run.
+  Files whose contents changed are tagged `explanation-outdated`, and `status`/`export` ask
+  only for new or changed files and connections.
+- **In the dashboard,** a file's connections are grouped by the other file, each with its
+  explanation and what it goes through ("via validateGraph()").
+
+The one setup prompt in the main README runs this loop for you.
+
 ## Comparing with an `/understand` graph
 
 ```bash
