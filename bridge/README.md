@@ -14,6 +14,13 @@ leaves your machine), then explore it in **both** projects' own viewers:
 bridge/run.sh /path/to/your/project
 ```
 
+Someone else's repository works the same way. Pass a link instead of a folder:
+`owner/repo` (GitHub), `https://github.com/owner/repo`, a `…/tree/<branch>/<folder>` link
+for one part of a monorepo, or any git URL (`--branch` picks a branch). It is shallow-cloned
+to `~/understand-repos/<host>/<owner>/<repo>` (set `UA_REPOS_DIR` to change that), or
+updated if it's already there. `graphify-out/` and `.ua/` are added to that clone's
+`.git/info/exclude`. The code is only parsed, never executed.
+
 | Option | Effect |
 |---|---|
 | `--view both` (default) | serve graphify's view on `port+1` **and** the Understand-Anything dashboard on `port` |
@@ -22,6 +29,7 @@ bridge/run.sh /path/to/your/project
 | `--view none` | just build + convert + validate, start nothing |
 | `--port N` | dashboard port (default 5173; graphify view uses N+1) |
 | `--force` | overwrite an existing `knowledge-graph.json` that `/understand` produced |
+| `--branch B` | branch to download, when you pass a repository link |
 
 Steps it runs:
 

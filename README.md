@@ -17,7 +17,8 @@ It runs on your own computer; your files are not uploaded anywhere.
 > 🤖 **Fastest way:** open your AI coding agent (Claude Code, Codex, Cursor, …) **in your
 > codebase** and paste **[the one setup prompt](#-the-one-prompt-set-up-my-codebase)**. It
 > maps your code, explains every file and every connection, and opens the dashboard.
-> Nothing else to do.
+> Nothing else to do. For **someone else's repository**, use
+> **[this one](#-the-one-prompt-for-someone-elses-repository)** and paste their link.
 
 ---
 
@@ -199,6 +200,31 @@ For example, to explore graphify itself:
 ```bash
 bridge/run.sh graphify
 ```
+
+### Someone else's repository
+
+To see how another project is built, give the link instead of a folder:
+```bash
+bridge/run.sh https://github.com/owner/repo
+```
+Shorter, for GitHub:
+```bash
+bridge/run.sh owner/repo
+```
+Only one part of a big repository (copy the folder's link from GitHub):
+```bash
+bridge/run.sh https://github.com/owner/repo/tree/main/packages/web
+```
+
+- It downloads the **latest version only** (no history, so it's quick) to
+  `~/understand-repos/<site>/<owner>/<repo>`, and prints that path. Running it again
+  updates the same copy. Other git links work too, and `--branch name` picks a branch.
+- **Their code is only read, never run or installed.** graphify parses the files as text.
+- graphify's output is hidden from that copy's git, so nothing shows up as a change.
+- To also get **every file and connection explained**, use
+  [the one prompt for someone else's repository](#-the-one-prompt-for-someone-elses-repository).
+- Private repositories work if your computer can already download them with `git clone`
+  (for example, if you're logged in with GitHub's `gh` tool).
 
 What happens:
 1. **graphify reads the project.** It finds every file, function and class, and what
@@ -386,6 +412,76 @@ TOOL/README.md, fix what you safely can, and continue.
 takes a while and uses some of your agent's usage limits. graphify's map (step 4) costs
 nothing. Explanations are saved in `.ua/enrichments.json` in your project. Keep that file and
 a later refresh only explains what changed.
+
+### ⭐ The one prompt for someone else's repository
+
+Want to understand a project that isn't yours? Open your coding agent **anywhere**, paste
+this, and replace `<<REPOSITORY LINK>>` with the repository's link (for example
+`https://github.com/owner/repo`, or a link to one of its folders).
+
+<details open>
+<summary><b>Copy this prompt</b></summary>
+
+```text
+Use "Understand Anything with graphify" (https://github.com/Okaytu/Understand-Anything-with-graphify)
+to help me understand someone else's repository: <<REPOSITORY LINK>>
+Map every file, explain every connection in plain language, and open the interactive
+dashboard. Do every step without asking me, except before installing software system-wide.
+Tell me what you're doing in short, plain sentences.
+
+A. Get the tool
+1. If ~/Understand-Anything-with-graphify exists, run
+   `git -C ~/Understand-Anything-with-graphify pull --ff-only`; otherwise clone the repository
+   there. Below, TOOL means that folder (use its absolute path).
+2. Check git, node (22 or newer), pnpm (10 or newer), uv and python3 (3.10 or newer).
+   TOOL/README.md section 3 shows how to install them. If one is missing, tell me which one
+   and ask before installing it.
+
+B. Download and map the repository (graphify, no AI)
+3. Run `TOOL/bridge/run.sh "<<REPOSITORY LINK>>" --view none`. This downloads the latest
+   version of the repository to ~/understand-repos/... and maps it. It must print a line
+   starting with `valid:`. Its "Your copy is at:" line gives the folder: below, PROJECT
+   means that path.
+   Never run, build or install the downloaded project's own code: only read it.
+
+C. Explain everything (you write the explanations)
+4. Run `python3 TOOL/bridge/enrich.py export "PROJECT"`. It writes task files to
+   PROJECT/.ua/enrich/: batch-NNN.json (files and their connections) and project.json
+   (overview, groups and tour).
+5. For each task file: follow its "instructions", read every source file it lists, and write
+   valid JSON to its "answer_file":
+   - a plain-language summary of every file;
+   - one or two sentences on WHY each connection exists (its purpose, not just "it imports
+     it");
+   - the listed key symbols;
+   - for project.json: the overview, a meaningful name and description for every group, and
+     a 6 to 12 step tour.
+   Base everything on the actual code and the repository's README. Never invent.
+6. Run `python3 TOOL/bridge/enrich.py apply "PROJECT"`. It must print `valid:`. If it reports
+   rejected entries, correct them and apply again.
+7. Repeat steps 4 to 6 until `python3 TOOL/bridge/enrich.py status "PROJECT" --check` prints
+   COMPLETE and exits with 0. A big repository needs many batches: keep going until it is
+   complete, and after each round tell me the progress (e.g. "120/340 files, 410/1200
+   connections").
+
+D. Open it
+8. Start the viewers in the background: `TOOL/bridge/serve.sh "PROJECT"`. Give me the full
+   `🔑 Dashboard URL` link, including `?token=...`, and http://127.0.0.1:5174/graph.html.
+   If you can't keep a background process running, give me that command to run myself.
+9. Finish with:
+   - what the project does and who it's for, in 3 sentences;
+   - its main groups;
+   - its tech stack (from the files, not guesses);
+   - which 5 files to read first, in order;
+   - how to refresh later: run step 3 again (it updates my copy), then steps 4 to 7.
+     Existing explanations are kept, and only new or changed files need explaining.
+
+Rules: don't change any file in the downloaded repository except the generated graphify-out/
+and .ua/ folders. Don't commit or push anything anywhere. If a step fails, read the error and
+the "Troubleshooting" table in TOOL/README.md, fix what you safely can, and continue.
+```
+
+</details>
 
 ### More prompts for specific jobs
 
@@ -686,6 +782,7 @@ To see how the AI version compares with graphify's free version on the same proj
 | `command not found: pnpm` (or `uv`, `node`) | That tool isn't installed, or the terminal was opened before installing it. Redo [setup](#3-one-time-setup), then open a new terminal. |
 | `permission denied` when running a script | Run `chmod +x bridge/*.sh learn-from-zero/*.sh` once, then try again. |
 | The page says **"Access Token Required"** | Use the full 🔑 link from the terminal, including `?token=…`. A new token is made each time you start it. |
+| **"could not download …"** (someone else's repository) | Check the link opens in your browser. For a private repository, make sure `git clone <link>` works in your terminal first (log in to GitHub, e.g. with `gh auth login`). |
 | **Port already in use** | Something else is using port 5173. Stop it, or add `--port 6000` to the command and use ports 6000 / 6001. |
 | graphify's view (`graph.html`) is **blank** | It loads its drawing library from the internet, so it needs a connection. The dashboard works offline. |
 | Orange **"working-tree changes"** banner | Add `graphify-out/` to the project's `.gitignore` (see the tip in [Way 1](#5-way-1-understand-an-existing-project)). |
@@ -723,7 +820,7 @@ Understand Anything does not have it.
 <summary><b>Commands</b></summary>
 
 ```bash
-bridge/run.sh <project> [--view both|ua|graphify|none] [--port N] [--force]
+bridge/run.sh <folder | repo-url | owner/repo> [--view both|ua|graphify|none] [--port N] [--force] [--branch B]
 learn-from-zero/learn.sh <notes> [--view both|ua|graphify|none] [--port N] [--force]
 bridge/serve.sh <dir> [--view both|ua|graphify] [--port N]      # viewers only, no rebuild
 python3 bridge/enrich.py {status|export|apply} <project>          # agent-written explanations
