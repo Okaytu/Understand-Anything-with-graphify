@@ -145,51 +145,117 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
     ctx.fillRect(0, 0, w, h);
     ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * x, dpr * y);
 
-    // links
+    // links — batched into one path per style (one stroke for thousands of lines),
+    // with only the focused node's links drawn separately on top.
+    const viewW = w / k, viewH = h / k, minX = -x / k, minY = -y / k;
+    const inView = (px: number, py: number, pad: number) =>
+      px > minX - pad && px < minX + viewW + pad && py > minY - pad && py < minY + viewH + pad;
+    const normal = new Path2D();
+    const dim = new Path2D();
+    const hi: SimLink[] = [];
     for (const l of linksRef.current) {
       const s = l.source as SimNode;
       const tg = l.target as SimNode;
       if (s.x == null || tg.x == null) continue;
-      const touchesFocus = st.focusId && (s.id === st.focusId || tg.id === st.focusId);
-      const lit = st.focusId ? touchesFocus : isLit(s.id) && isLit(tg.id);
-      ctx.strokeStyle = touchesFocus ? LINK_HI : lit ? LINK : LINK_DIM;
-      ctx.lineWidth = (touchesFocus ? 1.6 : 0.8) / Math.sqrt(k);
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y!);
-      ctx.lineTo(tg.x, tg.y!);
-      ctx.stroke();
-      if (st.showArrows && (touchesFocus || k > 1.4)) {
-        const ang = Math.atan2(tg.y! - s.y!, tg.x - s.x);
-        const ax = tg.x - Math.cos(ang) * (tg.r + 2);
-        const ay = tg.y! - Math.sin(ang) * (tg.r + 2);
-        const size = 5 / Math.sqrt(k);
-        ctx.fillStyle = ctx.strokeStyle;
-        ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(ax - Math.cos(ang - 0.45) * size, ay - Math.sin(ang - 0.45) * size);
-        ctx.lineTo(ax - Math.cos(ang + 0.45) * size, ay - Math.sin(ang + 0.45) * size);
-        ctx.closePath();
-        ctx.fill();
+      if (!inView(s.x, s.y!, 400) && !inView(tg.x, tg.y!, 400)) continue;
+      if (st.focusId && (s.id === st.focusId || tg.id === st.focusId)) {
+        hi.push(l);
+        continue;
       }
+      const lit = !st.focusId && isLit(s.id) && isLit(tg.id);
+      const path = lit ? normal : dim;
+      path.moveTo(s.x, s.y!);
+      path.lineTo(tg.x, tg.y!);
+    }
+    ctx.lineWidth = 0.8 / Math.sqrt(k);
+    ctx.strokeStyle = LINK_DIM;
+    ctx.stroke(dim);
+    ctx.strokeStyle = LINK;
+    ctx.stroke(normal);
+    const arrows = new Path2D();
+    const addArrow = (s: SimNode, tg: SimNode) => {
+      const ang = Math.atan2(tg.y! - s.y!, tg.x! - s.x!);
+      const ax = tg.x! - Math.cos(ang) * (tg.r + 2);
+      const ay = tg.y! - Math.sin(ang) * (tg.r + 2);
+      const size = 5 / Math.sqrt(k);
+      arrows.moveTo(ax, ay);
+      arrows.lineTo(ax - Math.cos(ang - 0.45) * size, ay - Math.sin(ang - 0.45) * size);
+      arrows.lineTo(ax - Math.cos(ang + 0.45) * size, ay - Math.sin(ang + 0.45) * size);
+      arrows.closePath();
+    };
+    if (st.showArrows && k > 1.4) {
+      for (const l of linksRef.current) {
+        const s = l.source as SimNode;
+        const tg = l.target as SimNode;
+        if (s.x == null || tg.x == null || !inView(tg.x, tg.y!, 20)) continue;
+        if (st.focusId && (s.id === st.focusId || tg.id === st.focusId)) continue;
+        if (!st.focusId && isLit(s.id) && isLit(tg.id)) addArrow(s, tg);
+      }
+      ctx.fillStyle = LINK;
+      ctx.fill(arrows);
+    }
+    if (hi.length) {
+      const hiPath = new Path2D();
+      const hiArrows = new Path2D();
+      for (const l of hi) {
+        const s = l.source as SimNode;
+        const tg = l.target as SimNode;
+        hiPath.moveTo(s.x!, s.y!);
+        hiPath.lineTo(tg.x!, tg.y!);
+        if (st.showArrows) {
+          const ang = Math.atan2(tg.y! - s.y!, tg.x! - s.x!);
+          const ax = tg.x! - Math.cos(ang) * (tg.r + 2);
+          const ay = tg.y! - Math.sin(ang) * (tg.r + 2);
+          const size = 5 / Math.sqrt(k);
+          hiArrows.moveTo(ax, ay);
+          hiArrows.lineTo(ax - Math.cos(ang - 0.45) * size, ay - Math.sin(ang - 0.45) * size);
+          hiArrows.lineTo(ax - Math.cos(ang + 0.45) * size, ay - Math.sin(ang + 0.45) * size);
+          hiArrows.closePath();
+        }
+      }
+      ctx.lineWidth = 1.6 / Math.sqrt(k);
+      ctx.strokeStyle = LINK_HI;
+      ctx.stroke(hiPath);
+      ctx.fillStyle = LINK_HI;
+      ctx.fill(hiArrows);
     }
 
-    // nodes
+    // nodes — one path per (colour, lit) bucket instead of one fill per dot
+    const buckets = new Map<string, Path2D>();
+    let focusNode: SimNode | null = null;
+    let selectedNode: SimNode | null = null;
     for (const n of nodesRef.current) {
-      if (n.x == null) continue;
-      const lit = isLit(n.id);
-      ctx.globalAlpha = lit ? 1 : 0.12;
-      ctx.fillStyle = st.colorGroups ? groupColor(n.group) : "#b3b3b3";
-      if (n.id === st.focusId) ctx.fillStyle = LINK_HI;
-      ctx.beginPath();
-      ctx.arc(n.x, n.y!, n.r, 0, Math.PI * 2);
-      ctx.fill();
-      if (n.id === st.selectedVisible) {
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 1.5 / k;
-        ctx.beginPath();
-        ctx.arc(n.x, n.y!, n.r + 3 / k, 0, Math.PI * 2);
-        ctx.stroke();
+      if (n.x == null || !inView(n.x, n.y!, n.r + 2)) continue;
+      if (n.id === st.focusId) focusNode = n;
+      if (n.id === st.selectedVisible) selectedNode = n;
+      const key = `${isLit(n.id) ? 1 : 0}|${st.colorGroups ? groupColor(n.group) : "#b3b3b3"}`;
+      let path = buckets.get(key);
+      if (!path) {
+        path = new Path2D();
+        buckets.set(key, path);
       }
+      path.moveTo(n.x + n.r, n.y!);
+      path.arc(n.x, n.y!, n.r, 0, Math.PI * 2);
+    }
+    for (const [key, path] of buckets) {
+      const [lit, color] = key.split("|");
+      ctx.globalAlpha = lit === "1" ? 1 : 0.12;
+      ctx.fillStyle = color;
+      ctx.fill(path);
+    }
+    ctx.globalAlpha = 1;
+    if (focusNode) {
+      ctx.fillStyle = LINK_HI;
+      ctx.beginPath();
+      ctx.arc(focusNode.x!, focusNode.y!, focusNode.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (selectedNode) {
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.5 / k;
+      ctx.beginPath();
+      ctx.arc(selectedNode.x!, selectedNode.y!, selectedNode.r + 3 / k, 0, Math.PI * 2);
+      ctx.stroke();
     }
 
     // labels: like Obsidian, a label fades in once its dot is big enough on screen
@@ -199,7 +265,7 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     for (const n of nodesRef.current) {
-      if (n.x == null) continue;
+      if (n.x == null || !inView(n.x, n.y!, 60)) continue;
       const near = st.focusId ? n.id === st.focusId || !!neighbors?.has(n.id) : false;
       const alpha = st.focusId ? (near ? 1 : 0) : isLit(n.id) ? labelAlpha(n.r) : 0;
       if (alpha <= 0.02) continue;
@@ -235,7 +301,7 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
       .force("x", forceX<SimNode>(0).strength(0.04))
       .force("y", forceY<SimNode>(0).strength(0.04))
       .force("collide", forceCollide<SimNode>((d) => d.r + 3))
-      .alphaDecay(0.03)
+      .alphaDecay(nodes.length > 2000 ? 0.06 : 0.03)
       .on("tick", requestDraw);
     simRef.current = sim;
     return () => {
