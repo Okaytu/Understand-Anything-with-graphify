@@ -70,6 +70,14 @@ no LLM, and running `/understand-knowledge` later adds step 2 on top of the same
 
 ## The dashboard (`packages/dashboard`)
 
+> **Added in this repo: Obsidian graph style** (the default; **Classic** in the header switches back).
+> Lives in `components/ObsidianGraphView.tsx` (canvas + d3-force), `components/ObsidianNotePanel.tsx`
+> (sidebar note) and `utils/obsidian-graph.ts` (tested data helpers). It draws dots sized by
+> connection count, lights up a hovered dot's neighbours, and shows a box of its outgoing links
+> and backlinks; clicking pins the box and opens the node as a note. In code graphs, functions,
+> classes and constants fold into their file until you switch them on. The choice is saved per
+> browser (`localStorage` key `ua.graphStyle`). Upstream Understand-Anything does not have this view.
+
 - **Graph-first:** about 75% of the screen is the graph (React Flow + ELK layout), with a
   360px sidebar.
 - **Layers → files → classes → functions:** the overview shows layers as clusters; clicking

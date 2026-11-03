@@ -6,7 +6,7 @@ leaves your machine), then explore it in **both** projects' own viewers:
 | View | What you get | Where |
 |---|---|---|
 | **graphify** | Force-directed graph coloured by community, node search, community filter, `GRAPH_REPORT.md` (god nodes, surprising connections, suggested questions) | `http://127.0.0.1:5174/graph.html` |
-| **Understand-Anything** | Layered dashboard: graphify communities as layers you drill into, file → class → function views, code viewer, fuzzy search, a generated guided tour | `http://127.0.0.1:5173/?token=…` |
+| **Understand-Anything** | Opens as an **Obsidian-style graph**: one dot per file (switch on *Functions & classes* for every symbol), coloured by graphify community; hover for a box of what it imports, calls and is used by; click to open it as a note with Links, Backlinks, what it defines and an *Open code* button. **Classic** in the header switches to the layered dashboard (layers → files → classes → functions). Code viewer, search and the generated tour work in both. | `http://127.0.0.1:5173/?token=…` |
 
 ## One command
 

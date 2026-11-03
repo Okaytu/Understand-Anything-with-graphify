@@ -37,7 +37,7 @@ Generated files (`.ua/`, `graphify-out/`) are git-ignored.
 
 | View | Shows |
 |---|---|
-| **Understand-Anything dashboard** (`:5173`) | Notes as `article` nodes and `index.md` categories as `topic` nodes and **layers**, in a force-directed layout. Click a note to see its definition, category, outgoing links and **backlinks**. The tour follows the order of categories in `index.md`. |
+| **Understand-Anything dashboard** (`:5173`) | An **Obsidian-style graph** of your notes, coloured by `index.md` category. Hover a note to light up its neighbours and see a box of what it links to and what links to it; click it to read the whole note in the sidebar, with clickable `[[links]]`, Links and **Backlinks**. The tour follows the order of categories in `index.md`. **Classic** in the header switches to the card layout. |
 | **graphify view** (`:5174/graph.html`) | Every note, its headings and its links, coloured by detected community, plus `GRAPH_REPORT.md` |
 
 ## Folder layout (the Karpathy LLM-wiki pattern)

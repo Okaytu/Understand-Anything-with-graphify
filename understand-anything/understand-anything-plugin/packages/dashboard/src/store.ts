@@ -16,6 +16,19 @@ export type Complexity = "simple" | "moderate" | "complex";
 export type EdgeCategory = "structural" | "behavioral" | "data-flow" | "dependencies" | "semantic" | "infrastructure" | "domain" | "knowledge" | "design";
 export type ViewMode = "structural" | "domain" | "knowledge";
 export type DetailLevel = "file" | "class";
+/** How structural/knowledge graphs are drawn: Obsidian-style dots or the classic card layout. */
+export type GraphStyle = "obsidian" | "classic";
+
+const GRAPH_STYLE_KEY = "ua.graphStyle";
+
+function loadGraphStyle(): GraphStyle {
+  try {
+    const v = globalThis.localStorage?.getItem(GRAPH_STYLE_KEY);
+    return v === "classic" ? "classic" : "obsidian";
+  } catch {
+    return "obsidian";
+  }
+}
 
 export interface FilterState {
   nodeTypes: Set<NodeType>;
@@ -191,6 +204,8 @@ interface DashboardStore {
 
   // View mode
   viewMode: ViewMode;
+  graphStyle: GraphStyle;
+  setGraphStyle: (style: GraphStyle) => void;
   isKnowledgeGraph: boolean;
   domainGraph: KnowledgeGraph | null;
   activeDomainId: string | null;
@@ -683,6 +698,15 @@ export const useDashboardStore = create<DashboardStore>()((set, get) => ({
   },
 
   viewMode: "structural",
+  graphStyle: loadGraphStyle(),
+  setGraphStyle: (style) => {
+    try {
+      globalThis.localStorage?.setItem(GRAPH_STYLE_KEY, style);
+    } catch {
+      /* private mode / storage disabled: the choice just isn't remembered */
+    }
+    set({ graphStyle: style });
+  },
   isKnowledgeGraph: false,
   domainGraph: null,
   activeDomainId: null,

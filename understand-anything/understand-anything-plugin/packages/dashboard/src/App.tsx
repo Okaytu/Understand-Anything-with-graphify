@@ -5,6 +5,8 @@ import { useDashboardStore } from "./store";
 import GraphView from "./components/GraphView";
 import DomainGraphView from "./components/DomainGraphView";
 import KnowledgeGraphView from "./components/KnowledgeGraphView";
+import ObsidianGraphView from "./components/ObsidianGraphView";
+import ObsidianNotePanel from "./components/ObsidianNotePanel";
 import SearchBar from "./components/SearchBar";
 import NodeInfo from "./components/NodeInfo";
 import LayerLegend from "./components/LayerLegend";
@@ -309,6 +311,8 @@ function DashboardContent({
   }, []);
   const viewMode = useDashboardStore((s) => s.viewMode);
   const setViewMode = useDashboardStore((s) => s.setViewMode);
+  const graphStyle = useDashboardStore((s) => s.graphStyle);
+  const setGraphStyle = useDashboardStore((s) => s.setGraphStyle);
   const isKnowledgeGraph = useDashboardStore((s) => s.isKnowledgeGraph);
   const domainGraph = useDashboardStore((s) => s.domainGraph);
   const layoutIssues = useDashboardStore((s) => s.layoutIssues);
@@ -445,9 +449,10 @@ function DashboardContent({
   // NodeInfo always takes priority when a node is selected.
   // Learn mode adds LearnPanel below it; otherwise ProjectOverview shows when idle.
   const isLearnMode = tourActive || persona === "junior";
+  const obsidianActive = graphStyle === "obsidian" && viewMode !== "domain";
   const infoSidebarContent = (
     <>
-      {selectedNodeId && <NodeInfo />}
+      {selectedNodeId && (obsidianActive ? <ObsidianNotePanel /> : <NodeInfo />)}
       {isLearnMode && (
         <Suspense fallback={null}>
           <LearnPanel />
@@ -506,6 +511,27 @@ function DashboardContent({
           </h1>
           <div className="w-px h-5 bg-border-subtle hidden sm:block" />
           <PersonaSelector />
+          {graph && viewMode !== "domain" && (
+            <>
+              <div className="w-px h-5 bg-border-subtle" />
+              <div className="flex items-center bg-elevated rounded-lg p-0.5" title={t.obsidian.graphStyle}>
+                {(["obsidian", "classic"] as const).map((style) => (
+                  <button
+                    key={style}
+                    type="button"
+                    onClick={() => setGraphStyle(style)}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                      graphStyle === style
+                        ? "bg-accent/20 text-accent"
+                        : "text-text-muted hover:text-text-secondary"
+                    }`}
+                  >
+                    {style === "obsidian" ? t.obsidian.obsidian : t.obsidian.classic}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           {graph && !isKnowledgeGraph && domainGraph && (
             <>
               <div className="w-px h-5 bg-border-subtle" />
@@ -544,7 +570,7 @@ function DashboardContent({
           <div className="flex items-center gap-4 w-max">
             <DiffToggle />
             {/* Detail level: file view (architecture) / class view (code structure) */}
-            {!isKnowledgeGraph && viewMode !== "domain" && (
+            {!isKnowledgeGraph && viewMode !== "domain" && !obsidianActive && (
               <>
                 <div className="w-px h-5 bg-border-subtle" />
                 <div className="flex items-center bg-elevated rounded-lg p-0.5">
@@ -695,7 +721,9 @@ function DashboardContent({
       <div className="flex-1 flex min-h-0 relative">
         {/* Graph area */}
         <div className="flex-1 min-w-0 min-h-0 relative">
-          {viewMode === "knowledge" ? (
+          {obsidianActive ? (
+            <ObsidianGraphView />
+          ) : viewMode === "knowledge" ? (
             <KnowledgeGraphView />
           ) : viewMode === "domain" && domainGraph ? (
             <DomainGraphView />
