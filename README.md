@@ -1,7 +1,7 @@
 # Understand Anything with graphify
 
-**Turn any code project, or anything you're learning from scratch, into a map you can
-click through, like Obsidian's graph view.**
+**Understand any codebase: an Obsidian-style map of every file and every connection,
+explained in plain language.** It can also map a topic you're learning from scratch.
 
 ![The dashboard: every dot is a file or note, coloured by group, with an overview and guided tour on the right](docs/images/dashboard-overview.jpg)
 
@@ -14,9 +14,10 @@ This repository combines two open-source tools and adds the pieces that connect 
 
 It runs on your own computer; your files are not uploaded anywhere.
 
-> 🤖 **Have an AI coding agent (Claude Code, Codex, Cursor, …)?** Open it in your project and
-> paste **[the one setup prompt](#-the-one-prompt-set-up-my-codebase)**: it maps your code,
-> explains every file and every connection, and opens the dashboard.
+> 🤖 **Fastest way:** open your AI coding agent (Claude Code, Codex, Cursor, …) **in your
+> codebase** and paste **[the one setup prompt](#-the-one-prompt-set-up-my-codebase)**. It
+> maps your code, explains every file and every connection, and opens the dashboard.
+> Nothing else to do.
 
 ---
 
@@ -38,15 +39,17 @@ It runs on your own computer; your files are not uploaded anywhere.
 
 ## 1. What can I do with it?
 
-There are two ways to learn with it:
+It is built mainly for **understanding codebases** (Way 1). Way 2 uses the same viewer to
+learn a topic that has no code.
 
-| | **Way 1: learn from what you have** | **Way 2: start from zero** |
+| | **Way 1: understand a codebase** (main use) | **Way 2: learn a topic from zero** |
 |---|---|---|
-| **Use it when…** | you have a project (an app, a website, any code) and want to understand how it works | you want to learn a topic that has no code, such as how a business works, a subject for an exam, or a new field at work |
+| **Use it when…** | you have code (an app, a website, a library, a project you just joined) and want to understand how it works | you want to learn something with no code, such as how a business works, a subject for an exam, or a new field at work |
 | **The map comes from…** | the project's files, read automatically | short notes you write as you learn, linked to each other |
 | **It grows when…** | the project changes | you add a note |
 | **"What should I learn next?"** | a guided tour: the most important parts first | a list of ideas you mentioned but haven't written about yet |
 | **One command** | `bridge/run.sh <project folder>` | `learn-from-zero/learn.sh <notes folder>` |
+| **Explanations** | from graphify alone: the structure, plus short generated descriptions. With [the one prompt](#-the-one-prompt-set-up-my-codebase), your AI agent writes plain-language explanations of every file and every connection | your own notes |
 
 Both ways open the same viewer, so once you know one, you know both.
 
@@ -157,13 +160,21 @@ cd Understand-Anything-with-graphify
 > No Git? On the GitHub page, click **Code → Download ZIP**, unzip it, and open a terminal in
 > that folder. Everything below still works, except the parts about history and updates.
 
-**Step 2. Open the example.** It is 16 linked notes about how a small café makes money:
+**Step 2. Map some real code.** This example maps the core of Understand Anything itself
+(165 files):
 ```bash
-learn-from-zero/learn.sh learn-from-zero/examples/how-a-business-works
+bridge/run.sh understand-anything/understand-anything-plugin/packages/core/src
+```
+To map **your own code** instead, give the path to your project:
+```bash
+bridge/run.sh /path/to/your/project
 ```
 
 The **first run takes a few minutes**, because it downloads what the dashboard and graphify
 need. Later runs take seconds.
+
+> Prefer a non-code example? `learn-from-zero/learn.sh learn-from-zero/examples/how-a-business-works`
+> opens 16 linked notes about how a small café makes money (Way 2).
 
 **Step 3. Open the link.** When it's ready, the terminal shows a line like this:
 ```
@@ -194,6 +205,11 @@ What happens:
    uses what. This happens on your computer, with no AI and no internet needed.
 2. **The result is converted and checked** so the dashboard can show it.
 3. **Both viewers open.** Open the 🔑 link from the terminal, as in step 3 above.
+
+**Want every file and connection explained in plain language?** Let your AI coding agent
+write the explanations: paste [the one setup prompt](#-the-one-prompt-set-up-my-codebase),
+or run the `bridge/enrich.py` loop yourself (see [`bridge/README.md`](bridge/README.md)).
+Without it you still get the full map, with short descriptions generated from the structure.
 
 **A good way to learn a project:**
 1. Read **`graphify-out/GRAPH_REPORT.md`** inside the project. It lists the handful of
@@ -388,9 +404,9 @@ a later refresh only explains what changed.
 
 ```text
 Help me use the GitHub repository "Understand Anything with graphify"
-(https://github.com/Okaytu/Understand-Anything-with-graphify). It turns code projects, or notes
-I write, into an interactive Obsidian-style graph dashboard. Set it up and show me the
-built-in example. I may not be a programmer: explain each step in one plain sentence.
+(https://github.com/Okaytu/Understand-Anything-with-graphify). It turns codebases into an
+interactive Obsidian-style graph dashboard. Set it up and show me the built-in code example.
+I may not be a programmer: explain each step in one plain sentence.
 
 1. Get the repository. If the current folder already contains both `bridge/run.sh` and
    `learn-from-zero/learn.sh`, use it. Otherwise run
@@ -401,12 +417,13 @@ built-in example. I may not be a programmer: explain each step in one plain sent
    `python3 --version` (3.10 or newer). If something is missing or too old, tell me which
    one, show me the install command for my operating system from section
    "3. One-time setup" of README.md, and ask me before installing anything.
-3. Build the example without starting any servers:
-   `learn-from-zero/learn.sh learn-from-zero/examples/how-a-business-works --view none`
+3. Map the example code (the core of Understand Anything itself, 165 files) without
+   starting any servers:
+   `bridge/run.sh understand-anything/understand-anything-plugin/packages/core/src --view none`
    The first run downloads dependencies and can take a few minutes. It has succeeded only
    if the output contains a line starting with `valid:`.
 4. Start the viewers as a background process:
-   `learn-from-zero/learn.sh learn-from-zero/examples/how-a-business-works`
+   `bridge/serve.sh understand-anything/understand-anything-plugin/packages/core/src`
    Wait for the line that starts with `🔑  Dashboard URL:` and give me that full link,
    including the `?token=...` part. Also give me http://127.0.0.1:5174/graph.html
    (graphify's view, which needs internet in the browser).
