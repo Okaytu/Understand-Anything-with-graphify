@@ -20,14 +20,15 @@ real system, open its code with path 1.
 ## Path 1: learn an existing codebase
 
 ```bash
-bridge/run.sh /path/to/project          # graphify -> convert -> validate -> both viewers
+bridge/run.sh /path/to/project          # graphify -> convert -> validate -> the dashboard
 ```
 
 1. **Map:** open graphify's `GRAPH_REPORT.md` first. The god nodes are the 5–10 things
    everything flows through, and the communities are the subsystems.
-2. **Walk the tour** in the dashboard (Info tab → Start Tour). It starts with the core
-   abstractions, then visits subsystems in foundations-first order.
-3. **Drill in:** click a layer, then a file, then a class. Read the code in the code viewer.
+2. **Read the roadmap** on the dashboard's **Learn** page: the tour first (the parts most of
+   the code relies on, then each part, foundations first), then every group, with Back / Next.
+3. **Explore:** on **Obsidian** click a dot, follow its links and press Open code; on
+   **Graphify** click a dot for a plain explanation, Show impact and a ready-to-copy AI prompt.
 4. **Ask questions** with graphify from inside the project:
    `graphify explain "X"`, `graphify path "A" "B"`, `graphify query "how does auth work"`.
 5. **Write down what you learned** as notes (path 2). That turns reading into memory.
@@ -42,7 +43,7 @@ python3 learn-from-zero/learn.py init ~/learning/restaurants "How restaurants wo
 python3 learn-from-zero/learn.py new ~/learning/restaurants "Food Cost" --category Money \
         --summary "what the ingredients of a dish cost" --link "Menu Pricing" --link "Suppliers"
 python3 learn-from-zero/learn.py next ~/learning/restaurants     # what to learn next
-learn-from-zero/learn.sh ~/learning/restaurants                  # build + both viewers
+learn-from-zero/learn.sh ~/learning/restaurants                  # build + the dashboard
 ```
 
 1. **Ask one question** in `wiki/Start Here.md`.

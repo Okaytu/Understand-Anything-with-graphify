@@ -10,7 +10,9 @@ This repository combines two open-source tools and adds the pieces that connect 
 - **[graphify](graphify/)** reads a project and works out what connects to what. It needs
   no AI and no internet, and it's free.
 - **[Understand Anything](understand-anything/)** shows that map as an interactive
-  dashboard, with an Obsidian-style graph, notes, links and a guided tour.
+  dashboard with three pages: **Learn** (a step-by-step roadmap with Back and Next),
+  **Obsidian** (a map of dots, notes and links) and **Graphify** (graphify's own map, where
+  clicking any dot explains it in plain words and gives you a ready-to-copy AI prompt).
 
 It runs on your own computer; your files are not uploaded anywhere.
 
@@ -78,8 +80,9 @@ clickable links, and **Backlinks** (everything that points to it).
 
 **It works on phones too.** Tap a dot to see its connections, then **Open note**.
 
-**And a second view.** graphify's own interactive map opens next to the dashboard,
-together with a written report of the most important parts of the project.
+**And graphify's own map.** The **Graphify** tab shows graphify's interactive map with a
+plain-language explain panel. graphify also saves a written report of the most important
+parts as `graphify-out/GRAPH_REPORT.md` in your project.
 
 ![graphify's view: the whole project as coloured clusters](docs/images/graphify-view.jpg)
 
@@ -182,7 +185,7 @@ need. Later runs take seconds.
 🔑  Dashboard URL: http://127.0.0.1:5173/?token=3f9a…
 ```
 Copy that **whole** link, including the `?token=…` part, into your web browser.
-graphify's view is at `http://127.0.0.1:5174/graph.html`.
+It opens on **Learn**; switch to **Obsidian** or **Graphify** with the tabs at the top.
 
 **Step 4. Stop it when you're done** by pressing **Ctrl + C** in the terminal.
 
@@ -230,7 +233,7 @@ What happens:
 1. **graphify reads the project.** It finds every file, function and class, and what
    uses what. This happens on your computer, with no AI and no internet needed.
 2. **The result is converted and checked** so the dashboard can show it.
-3. **Both viewers open.** Open the 🔑 link from the terminal, as in step 3 above.
+3. **The dashboard opens.** Open the 🔑 link from the terminal, as in step 3 above.
 
 **Want every file and connection explained in plain language?** Let your AI coding agent
 write the explanations: paste [the one setup prompt](#-the-one-prompt-set-up-my-codebase),
@@ -238,12 +241,14 @@ or run the `bridge/enrich.py` loop yourself (see [`bridge/README.md`](bridge/REA
 Without it you still get the full map, with short descriptions generated from the structure.
 
 **A good way to learn a project:**
-1. Read **`graphify-out/GRAPH_REPORT.md`** inside the project. It lists the handful of
-   parts everything else depends on.
-2. In the dashboard sidebar, click **Start Tour →**. It walks through the most important
-   parts first.
-3. Hover over the big dots: bigger means more connected, and usually more important.
-4. Click a file and press **Open code** to read the real code.
+1. Start on **Learn**. Read each step and press **Next**: it goes from the foundations to
+   the features, explains every file in it, and remembers where you stopped.
+2. Stuck on a step? Press **Copy AI prompt for this step** and paste it into ChatGPT, Claude
+   or any AI chat for a longer, beginner-friendly explanation.
+3. On **Graphify**, press **Health check** to see the riskiest files, loops and files
+   nothing uses, and type a question such as "where is login handled?" in the Ask box.
+4. Before changing a file, click its dot on **Graphify** and press **Show impact**: it
+   highlights everything that depends on it, with a count.
 5. Write down what you learned as notes (Way 2). That's how it sticks.
 
 > **Tip:** if the project uses Git, add the line `graphify-out/` to its `.gitignore` file.
@@ -305,8 +310,16 @@ More detail: [`learn-from-zero/README.md`](learn-from-zero/README.md).
 
 ## 7. How to use the dashboard
 
+The tabs at the top switch between three pages (on phones, in the ☰ menu):
+
+- **Learn**: the project as a roadmap. Read a step, press **Next** (or the → key).
+- **Obsidian**: a map of dots. Hover, click and follow links.
+- **Graphify**: graphify's own map with the explain panel, impact view, health check and Ask box.
+
 | I want to… | Do this |
 |---|---|
+| Learn the project from the start | **Learn**, then **Next** after each step |
+| Ask an AI to explain a step, a file or the whole project | **Copy AI prompt for this step** (Learn), or click a dot on **Graphify** and **Copy prompt**, or **Whole project** |
 | See what something connects to | **Hover** over its dot |
 | Read about it | **Click** the dot. Its note opens in the sidebar |
 | Jump to a related item | Click a name in the box or under **Links / Backlinks** |
@@ -314,12 +327,14 @@ More detail: [`learn-from-zero/README.md`](learn-from-zero/README.md).
 | Move around | **Drag** the background; **scroll** to zoom; or use the **+ / − / ⤢** buttons |
 | Move a dot | **Drag** the dot |
 | Find something | Type in the **search bar** at the top; matches light up |
-| Take the guided tour | **Start Tour →** in the sidebar |
-| See functions and classes, not only files | Settings (⚙, top left) → **Functions & classes** |
+| See how two parts are connected | **Path** in the header: type two names, then **Show the connection** |
+| See what breaks if I change a file | **Graphify** → click its dot → **Show impact** |
+| Find risky or unused files | **Graphify** → **Health check** |
+| See functions and classes, not only files | **Deep Dive** in the header, or Settings (⚙, top left) → **Functions & classes** |
 | Give the graph more room | **⇥** (top right) hides the sidebar |
-| Read the actual code | **Open code** in a file's note |
-| Use the original layout | **Classic** in the header (on phones, in the ☰ menu) |
-| Change colours | **Theme** in the header |
+| Read the actual code | **Open code**; dock it left, bottom or right with the buttons in its header |
+| Switch between Night and Day, or change colours | **Theme** in the header: pick **Night** or **Day**, then a style (Gold, Ocean, Forest, Rose, Minimal). The Graphify tab follows |
+| Hide or show the map's filter row | **Hide filters** / **Show filters** on the Obsidian page |
 
 On a phone: tap a dot to see its connections, then tap **Open note**. Use **Graph / Info /
 Files** at the bottom to switch screens.
@@ -382,7 +397,7 @@ C. Explain everything (you write the explanations, using as few tokens as possib
    - every connection: ONE sentence on WHY it exists (its purpose, not just "it imports it");
    - every listed key symbol: one sentence;
    - for project.json: the overview, a meaningful name and description for every group, and
-     a 6 to 12 step tour.
+     the tour its instructions ask for (it grows with the project: about one step per 10 files).
    Base everything on the actual code. Never invent.
    To save tokens: if you can start subagents (in Claude Code, the Task/Agent tool), give each
    task file to its own subagent, on a cheaper model such as Sonnet or Haiku when you can
@@ -397,15 +412,17 @@ C. Explain everything (you write the explanations, using as few tokens as possib
    connections").
 
 D. Open it
-9. Start the viewers in the background: `TOOL/bridge/serve.sh "PROJECT"`. Give me the full
-   `🔑 Dashboard URL` link, including `?token=...`, and http://127.0.0.1:5174/graph.html.
+9. Start the dashboard in the background: `TOOL/bridge/serve.sh "PROJECT"`. Give me the full
+   `🔑 Dashboard URL` link, including `?token=...`. It has three tabs: Learn (the roadmap),
+   Obsidian (the dot map) and Graphify (graphify's map with the explain panel).
    If you can't keep a background process running, give me that command to run myself.
 10. Finish with:
     - what the project is, in 3 sentences;
     - its main groups;
     - which file to start reading;
-    - how to refresh after code changes: run steps 4 to 8 again. Existing explanations are
-      kept, and only new or changed files need explaining.
+    - how to refresh after code changes: `TOOL/bridge/refresh.sh "PROJECT"` re-maps the project
+      and lists what is new or changed; then run steps 5 to 8 for those. Existing
+      explanations are kept, and only new or changed files need explaining.
 
 Rules: never edit PROJECT's source files. The only things you add to PROJECT are graphify-out/,
 .ua/ (its .ua/enrichments.json holds your explanations) and the .gitignore line. Don't commit
@@ -469,7 +486,7 @@ C. Explain everything (you write the explanations, using as few tokens as possib
    - every connection: ONE sentence on WHY it exists (its purpose, not just "it imports it");
    - every listed key symbol: one sentence;
    - for project.json: the overview, a meaningful name and description for every group, and
-     a 6 to 12 step tour.
+     the tour its instructions ask for (it grows with the project: about one step per 10 files).
    Base everything on the actual code and the repository's README. Never invent.
    To save tokens: if you can start subagents (in Claude Code, the Task/Agent tool), give each
    task file to its own subagent, on a cheaper model such as Sonnet or Haiku when you can
@@ -484,8 +501,9 @@ C. Explain everything (you write the explanations, using as few tokens as possib
    connections").
 
 D. Open it
-8. Start the viewers in the background: `TOOL/bridge/serve.sh "PROJECT"`. Give me the full
-   `🔑 Dashboard URL` link, including `?token=...`, and http://127.0.0.1:5174/graph.html.
+8. Start the dashboard in the background: `TOOL/bridge/serve.sh "PROJECT"`. Give me the full
+   `🔑 Dashboard URL` link, including `?token=...`. It has three tabs: Learn (the roadmap),
+   Obsidian (the dot map) and Graphify (graphify's map with the explain panel).
    If you can't keep a background process running, give me that command to run myself.
 9. Finish with:
    - what the project does and who it's for, in 3 sentences;
@@ -540,8 +558,7 @@ I may not be a programmer: explain each step in one plain sentence.
 4. Start the viewers as a background process:
    `bridge/serve.sh understand-anything/understand-anything-plugin/packages/core/src`
    Wait for the line that starts with `🔑  Dashboard URL:` and give me that full link,
-   including the `?token=...` part. Also give me http://127.0.0.1:5174/graph.html
-   (graphify's view, which needs internet in the browser).
+   including the `?token=...` part. (Its Graphify tab needs internet in the browser.)
 5. In 3 short bullet points, tell me what to click first. Then tell me how to stop the
    servers.
 
@@ -747,10 +764,12 @@ versions of both subprojects. Follow "History and upstream updates" in README.md
    graphify-upstream → https://github.com/Okaytu/graphify), then fetch `main` and `v8`.
 3. Run `git subtree pull --prefix=understand-anything ua-upstream main` and
    `git subtree pull --prefix=graphify graphify-upstream v8`.
-4. Resolve conflicts by keeping upstream's changes AND this repo's additions: the
-   Obsidian graph style in understand-anything/understand-anything-plugin/packages/dashboard
-   (App.tsx, store.ts, MobileLayout.tsx, MobileDrawer.tsx, locales/*, components/Obsidian*,
-   utils/obsidian-graph*). Explain every conflict you resolve.
+4. Resolve conflicts by keeping upstream's changes AND this repo's additions in
+   understand-anything/understand-anything-plugin/packages/dashboard: the three pages
+   (Learn, Obsidian, Graphify; the classic view is not shown) in App.tsx, store.ts, vite.config.ts (the token-protected /graphify/graph.html route), locales/*, themes/* (Night and Day themes), and components/MobileLayout.tsx, MobileDrawer.tsx, CodeViewer.tsx, NodeInfo.tsx, PersonaSelector.tsx, LayerLegend.tsx, FilterPanel.tsx, DiffToggle.tsx, ExportMenu.tsx, ThemePicker.tsx, KeyboardShortcutsHelp.tsx, StalenessBanner.tsx and PathFinderModal.tsx, plus this
+   repo's own files components/Obsidian*, components/LearnMode.tsx, components/GraphifyFrame.tsx,
+   components/header-styles.ts, utils/obsidian-graph*, utils/learn.ts and utils/path-finder.ts.
+   Explain every conflict you resolve.
 5. Verify, using the commands under "Running the tests" in README.md: the
    understand-anything tests, the dashboard build
    (`pnpm --filter @understand-anything/dashboard build`), the graphify tests, the bridge +
@@ -802,8 +821,10 @@ To see how the AI version compares with graphify's free version on the same proj
 | `permission denied` when running a script | Run `chmod +x bridge/*.sh learn-from-zero/*.sh` once, then try again. |
 | The page says **"Access Token Required"** | Use the full 🔑 link from the terminal, including `?token=…`. A new token is made each time you start it. |
 | **"could not download …"** (someone else's repository) | Check the link opens in your browser. For a private repository, make sure `git clone <link>` works in your terminal first (log in to GitHub, e.g. with `gh auth login`). |
-| **Port already in use** | Something else is using port 5173. Stop it, or add `--port 6000` to the command and use ports 6000 / 6001. |
-| graphify's view (`graph.html`) is **blank** | It loads its drawing library from the internet, so it needs a connection. The dashboard works offline. |
+| **Port already in use** | Something else is using port 5173. Stop it, or add `--port 5180` (any free port above 1024; browsers block 6000) and open the new 🔑 link. |
+| The **Graphify** tab is **blank** | graphify's map loads its drawing library from the internet, so it needs a connection. Learn and Obsidian work offline. |
+| The **Graphify** tab says "No graphify map yet" | Map the project first: `bridge/run.sh <project> --view none`, then reload. |
+| The dashboard says **missing or invalid token** | The server was restarted, which makes a new link. Copy the newest `🔑 Dashboard URL` from the terminal. |
 | Orange **"working-tree changes"** banner | Add `graphify-out/` to the project's `.gitignore` (see the tip in [Way 1](#5-way-1-understand-an-existing-project)). |
 | "**…already exists and was not created by this bridge**" | The project already has a map made by the AI version. Add `--force` to replace it. |
 | The first run is slow | It's downloading dependencies once. Later runs are fast. |
@@ -830,9 +851,13 @@ Only open the dashboard links yourself. The servers listen on your own computer 
 └── .github/workflows/     CI for everything above
 ```
 
-Additions inside `understand-anything/`: the Obsidian graph style
-(`packages/dashboard/src/components/Obsidian*.tsx`, `src/utils/obsidian-graph.ts`). Upstream
-Understand Anything does not have it.
+Additions inside `understand-anything/understand-anything-plugin/packages/dashboard/src/`
+(upstream Understand Anything does not have them): the Obsidian graph style
+(`components/Obsidian*.tsx`, `utils/obsidian-graph.ts`), the Learn roadmap
+(`components/LearnMode.tsx`, `utils/learn.ts`), the rewritten Path Finder
+(`utils/path-finder.ts`), the Graphify tab (`components/GraphifyFrame.tsx`), the shared header
+sizes (`components/header-styles.ts`) and their tests. Changed upstream files: App.tsx, store.ts, vite.config.ts (the token-protected /graphify/graph.html route), locales/*, themes/* (Night and Day themes), and components/MobileLayout.tsx, MobileDrawer.tsx, CodeViewer.tsx, NodeInfo.tsx, PersonaSelector.tsx, LayerLegend.tsx, FilterPanel.tsx, DiffToggle.tsx, ExportMenu.tsx, ThemePicker.tsx, KeyboardShortcutsHelp.tsx, StalenessBanner.tsx and PathFinderModal.tsx. The
+classic view's files are left in place but no longer shown, so upstream updates merge cleanly.
 </details>
 
 <details>
@@ -842,6 +867,8 @@ Understand Anything does not have it.
 bridge/run.sh <folder | repo-url | owner/repo> [--view both|ua|graphify|none] [--port N] [--force] [--branch B]
 learn-from-zero/learn.sh <notes> [--view both|ua|graphify|none] [--port N] [--force]
 bridge/serve.sh <dir> [--view both|ua|graphify] [--port N]      # viewers only, no rebuild
+bridge/refresh.sh <folder | repo-url>                             # re-map after changes, list what to explain
+python3 bridge/explain_html.py <project>                          # (re)build graph.html's explain panel
 python3 bridge/enrich.py {estimate|status|export|apply} <project> # agent-written explanations
 python3 bridge/compare_graphs.py <understand.json> <bridge.json> --project <src>
 bridge/compare_demo.sh                                            # regenerate notes/comparison-report.md
@@ -890,8 +917,8 @@ To pull updates:
 git subtree pull --prefix=understand-anything ua-upstream main
 git subtree pull --prefix=graphify graphify-upstream v8
 ```
-Expect conflicts in the dashboard files this repo changed (`App.tsx`, `store.ts`,
-`MobileLayout.tsx`, `MobileDrawer.tsx`, `locales/*`).
+Expect conflicts in the dashboard files this repo changed: App.tsx, store.ts, vite.config.ts (the token-protected /graphify/graph.html route), locales/*, themes/* (Night and Day themes), and components/MobileLayout.tsx, MobileDrawer.tsx, CodeViewer.tsx, NodeInfo.tsx, PersonaSelector.tsx, LayerLegend.tsx, FilterPanel.tsx, DiffToggle.tsx, ExportMenu.tsx, ThemePicker.tsx, KeyboardShortcutsHelp.tsx, StalenessBanner.tsx and PathFinderModal.tsx. Keep
+both sides: upstream's changes and this repo's three pages (Learn, Obsidian, Graphify).
 </details>
 
 <details>

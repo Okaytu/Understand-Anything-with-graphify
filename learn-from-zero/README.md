@@ -2,7 +2,7 @@
 
 For learning something with **no code to start from**, such as how a business works, how a
 law is made, or how the body digests food. You write short linked notes as you learn, and
-every rebuild turns them into a knowledge graph in both viewers. The graph grows with you,
+every rebuild turns them into a knowledge graph in the dashboard. The graph grows with you,
 and the links you haven't written yet tell you what to learn next.
 
 ```bash
@@ -16,7 +16,7 @@ python3 learn-from-zero/learn.py new ~/learning/restaurants "Food Cost" --catego
 # 3. see the gaps: linked but not written yet, most-linked first
 python3 learn-from-zero/learn.py next ~/learning/restaurants
 
-# 4. build the graph and open both viewers
+# 4. build the graph and open the dashboard
 learn-from-zero/learn.sh ~/learning/restaurants
 ```
 
@@ -35,10 +35,13 @@ Generated files (`.ua/`, `graphify-out/`) are git-ignored.
 
 ## What you get
 
-| View | Shows |
+One dashboard at `:5173` with three tabs:
+
+| Tab | Shows |
 |---|---|
-| **Understand-Anything dashboard** (`:5173`) | An **Obsidian-style graph** of your notes, coloured by `index.md` category. Hover a note to light up its neighbours and see a box of what it links to and what links to it; click it to read the whole note in the sidebar, with clickable `[[links]]`, Links and **Backlinks**. The tour follows the order of categories in `index.md`. **Classic** in the header switches to the card layout. |
-| **graphify view** (`:5174/graph.html`) | Every note, its headings and its links, coloured by detected community, plus `GRAPH_REPORT.md` |
+| **Learn** | Your notes as a reading roadmap that follows the order of categories in `index.md`: read a step, press **Next**. Each step has a *Copy AI prompt for this step* button. |
+| **Obsidian** | An **Obsidian-style graph** of your notes, coloured by `index.md` category. Hover a note to light up its neighbours and see a box of what it links to and what links to it; click it to read the whole note in the sidebar, with clickable `[[links]]`, Links and **Backlinks**. |
+| **Graphify** | graphify's map of every note, its headings and its links, coloured by detected community. Click a note for a plain explanation and a ready-to-copy AI prompt. |
 
 ## Folder layout (the Karpathy LLM-wiki pattern)
 

@@ -70,7 +70,9 @@ no LLM, and running `/understand-knowledge` later adds step 2 on top of the same
 
 ## The dashboard (`packages/dashboard`)
 
-> **Added in this repo: Obsidian graph style** (the default; **Classic** in the header switches back).
+> **Added in this repo: three pages in one dashboard.** **Learn** (opens first) is a roadmap you
+> read step by step; **Obsidian** is the dot map described here; **Graphify** shows graphify's
+> own map with a plain-language explain panel. Upstream's classic card view is no longer shown.
 > Lives in `components/ObsidianGraphView.tsx` (canvas + d3-force), `components/ObsidianNotePanel.tsx`
 > (sidebar note), `components/ObsidianSidebar.tsx` (overview, tour panel) and
 > `utils/obsidian-graph.ts` (tested data helpers). It is used in the phone layout too. It draws dots sized by
@@ -83,7 +85,8 @@ no LLM, and running `/understand-knowledge` later adds step 2 on top of the same
   360px sidebar.
 - **Layers → files → classes → functions:** the overview shows layers as clusters; clicking
   one drills in. File → symbol `contains` edges drive this (the bridge adds them for graphify graphs).
-- **Personas:** Overview / Learn / Deep Dive change how much detail is shown.
+- **Personas (Obsidian page):** Overview / Guided / Deep Dive. Deep Dive adds functions and
+  classes; Guided starts the tour.
 - **Tour:** the Info tab lists the steps; Start Tour walks them and highlights the nodes.
 - **Code viewer:** slides up when you click a file node. It is served by the dev server only
   for files listed in the graph, behind a one-time access token.
