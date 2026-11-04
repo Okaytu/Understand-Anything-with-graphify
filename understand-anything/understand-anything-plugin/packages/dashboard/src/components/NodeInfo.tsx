@@ -339,36 +339,32 @@ export default function NodeInfo() {
     <div className="h-full w-full overflow-auto p-5 animate-fade-slide-in">
       {/* Navigation history trail */}
       {historyNodes.length > 0 && (
-        <div className="mb-3 flex items-center gap-1 flex-wrap">
+        <div className="mb-4">
           <button
             onClick={goBackNode}
-            className="text-[10px] font-semibold text-gold hover:text-gold-bright transition-colors flex items-center gap-1"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border-medium bg-elevated text-sm font-semibold text-gold hover:text-gold-bright hover:border-gold transition-colors"
           >
             <span>←</span>
             <span>{t.common.back}</span>
           </button>
-          <span className="text-text-muted text-[10px]">│</span>
-          {historyNodes.slice(-3).map((h, i, arr) => (
-            <span key={`${h.id}-${i}`} className="flex items-center gap-1">
-              <button
-                onClick={() => {
-                  const fullIdx = historyNodes.length - arr.length + i;
-                  navigateToHistoryIndex(fullIdx);
-                }}
-                className="text-[10px] text-text-muted hover:text-gold transition-colors truncate max-w-[80px]"
-                title={h.name}
-              >
-                {h.name}
-              </button>
-              {i < arr.length - 1 && (
-                <span className="text-text-muted text-[10px]">›</span>
-              )}
-            </span>
-          ))}
-          <span className="text-text-muted text-[10px]">›</span>
-          <span className="text-[10px] text-text-primary font-medium truncate max-w-[80px]">
-            {node.name}
-          </span>
+          <div className="mt-2 flex items-center gap-x-1.5 gap-y-1 flex-wrap text-xs">
+            {historyNodes.slice(-3).map((h, i, arr) => (
+              <span key={`${h.id}-${i}`} className="flex items-center gap-1.5">
+                <button
+                  onClick={() => {
+                    const fullIdx = historyNodes.length - arr.length + i;
+                    navigateToHistoryIndex(fullIdx);
+                  }}
+                  className="px-1.5 py-0.5 rounded text-text-secondary hover:text-gold hover:bg-elevated transition-colors text-left break-words"
+                  title={h.name}
+                >
+                  {h.name}
+                </button>
+                <span className="text-text-muted">›</span>
+              </span>
+            ))}
+            <span className="px-1.5 py-0.5 text-text-primary font-medium break-words">{node.name}</span>
+          </div>
         </div>
       )}
 

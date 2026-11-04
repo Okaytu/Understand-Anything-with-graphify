@@ -22,10 +22,13 @@ import {
   splitWikilinks,
   type Connection,
 } from "../utils/obsidian-graph";
+import { complexityOf, firstSentence } from "../utils/learn";
+
+const COMPLEXITY_DOT = { simple: "bg-emerald-400", moderate: "bg-amber-400", complex: "bg-rose-400" } as const;
 
 const NODE_HREF = "#ua-node=";
 const MISSING_HREF = "#ua-missing";
-const LINK_COLOR = "text-[#a882ff]";
+const LINK_COLOR = "text-accent";
 
 /** Rewrite [[wikilinks]] into markdown links the custom `a` renderer understands. */
 function wikilinksToMarkdown(text: string, nameIndex: Map<string, string>): string {
@@ -85,7 +88,7 @@ export default function ObsidianNotePanel() {
   // src/__tests__/x.ts, so escape the characters markdown would turn into bold/italics.
   const body = node.knowledgeMeta?.content
     ? stripTitle(node.knowledgeMeta.content, node.name)
-    : [node.summary, node.languageNotes]
+    : [node.summary]
         .filter(Boolean)
         .map((s) => (s as string).replace(/([_*])/g, "\\$1"))
         .join("\n\n");
@@ -106,7 +109,7 @@ export default function ObsidianNotePanel() {
       }
       if (href === MISSING_HREF) {
         return (
-          <span className="text-[#a882ff]/50 underline decoration-dotted" title={o.unwritten}>
+          <span className="text-accent/60 underline decoration-dotted" title={o.unwritten}>
             {children}
           </span>
         );
@@ -131,13 +134,15 @@ export default function ObsidianNotePanel() {
       className?.includes("language-") ? (
         <code className="block bg-elevated rounded px-2 py-1.5 mb-3 overflow-x-auto text-[12px]">{children}</code>
       ) : (
-        <code className="bg-elevated rounded px-1 py-0.5 text-[12px] text-[#e6a96b]">{children}</code>
+        <code className="bg-elevated rounded px-1 py-0.5 text-[12px] text-text-primary">{children}</code>
       ),
     table: ({ children }) => <table className="mb-3 text-xs border-collapse">{children}</table>,
     th: ({ children }) => <th className="border border-border-subtle px-2 py-1 text-left">{children}</th>,
     td: ({ children }) => <td className="border border-border-subtle px-2 py-1">{children}</td>,
   };
 
+  // the converter's own bookkeeping tags mean nothing to a reader
+  const shownTags = node.tags.filter((tag) => !/^(graphify|explained|explanation-outdated|code|concept|community:|confidence:)/.test(tag));
   const location =
     node.filePath && node.type !== "article"
       ? `${node.filePath}${node.lineRange ? `:${node.lineRange[0]}` : ""}`
@@ -150,7 +155,7 @@ export default function ObsidianNotePanel() {
         <button
           type="button"
           onClick={goBackNode}
-          className="text-xs text-text-muted hover:text-text-primary mb-3"
+          className="mb-4 px-3 py-1.5 rounded-lg border border-border-medium bg-elevated text-sm font-semibold text-text-primary hover:bg-surface"
         >
           ← {t.common.back}
         </button>
@@ -158,15 +163,21 @@ export default function ObsidianNotePanel() {
 
       <h1 className="text-2xl font-semibold text-text-primary leading-tight break-words">{node.name}</h1>
       <div className="mt-1 text-xs text-text-muted flex flex-wrap gap-x-2">
-        <span className="uppercase tracking-wider">{node.type}</span>
+        <span className="">{node.type}</span>
         {category && <span>· {category}</span>}
         {location && <span className="font-mono break-all">· {location}</span>}
       </div>
+      {node.filePath && node.type !== "article" && (
+        <div className="mt-2 inline-flex items-center gap-2 text-sm text-text-secondary">
+          <span className={`w-2.5 h-2.5 rounded-full ${COMPLEXITY_DOT[complexityOf(node)]}`} aria-hidden />
+          {t.learnMode[complexityOf(node)]}
+        </div>
+      )}
 
-      {node.tags.length > 0 && (
+      {shownTags.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {node.tags.map((tag) => (
-            <span key={tag} className="rounded-full bg-[#a882ff]/12 px-2 py-0.5 text-[11px] text-[#c4a8ff]">
+          {shownTags.map((tag) => (
+            <span key={tag} className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
               #{tag}
             </span>
           ))}
@@ -177,7 +188,7 @@ export default function ObsidianNotePanel() {
         <button
           type="button"
           onClick={() => openCodeViewer(node.id)}
-          className="mt-3 rounded-md border border-border-medium px-3 py-1 text-xs text-text-primary hover:bg-elevated"
+          className="mt-3 h-9 rounded-lg border border-border-medium px-4 text-sm text-text-primary hover:bg-elevated"
         >
           {t.common.openCode}
         </button>
@@ -188,6 +199,13 @@ export default function ObsidianNotePanel() {
           {wikilinksToMarkdown(body, nameIndex)}
         </ReactMarkdown>
       </div>
+
+      {node.languageNotes && (
+        <aside className="mt-4 border-l-4 border-accent/60 bg-accent/5 rounded-r-lg px-4 py-3">
+          <div className="text-sm font-semibold text-accent">{t.learnMode.languageConcept}</div>
+          <p className="mt-1 text-sm leading-relaxed text-text-secondary">{node.languageNotes}</p>
+        </aside>
+      )}
 
       <Section title={o.links} count={conns.outgoing.length} empty={o.noLinks}>
         {conns.outgoing.map((c) => (
@@ -204,7 +222,13 @@ export default function ObsidianNotePanel() {
       {defined.length > 0 && (
         <Section title={o.defined} count={defined.length}>
           {defined.map((c) => (
-            <Item key={c.id} name={c.name} meta={c.type} onClick={() => selectNode(c.id)} />
+            <Item
+              key={c.id}
+              name={c.name}
+              meta={c.type}
+              why={c.summary ? firstSentence(c.summary) : undefined}
+              onClick={() => selectNode(c.id)}
+            />
           ))}
         </Section>
       )}
@@ -212,7 +236,7 @@ export default function ObsidianNotePanel() {
       {unwritten.length > 0 && (
         <Section title={o.unwritten} count={unwritten.length}>
           {unwritten.map((name) => (
-            <li key={name} className="px-2 py-1 text-[#a882ff]/50">
+            <li key={name} className="px-2 py-1 text-accent/60">
               {name}
             </li>
           ))}
@@ -235,7 +259,7 @@ function Section({
 }) {
   return (
     <div className="mt-5 border-t border-border-subtle pt-3">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted mb-1.5">
+      <div className="text-sm font-semibold text-text-muted mb-1.5">
         {title} <span className="text-text-muted/70">{count}</span>
       </div>
       {count === 0 && empty ? (

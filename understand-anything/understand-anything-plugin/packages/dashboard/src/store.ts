@@ -16,17 +16,21 @@ export type Complexity = "simple" | "moderate" | "complex";
 export type EdgeCategory = "structural" | "behavioral" | "data-flow" | "dependencies" | "semantic" | "infrastructure" | "domain" | "knowledge" | "design";
 export type ViewMode = "structural" | "domain" | "knowledge";
 export type DetailLevel = "file" | "class";
-/** How structural/knowledge graphs are drawn: Obsidian-style dots or the classic card layout. */
-export type GraphStyle = "obsidian" | "classic";
+/**
+ * Which page the dashboard shows: the Learn roadmap (a step-by-step reading guide), the
+ * Obsidian-style dot map, or graphify's own map with its explain panel.
+ */
+export type GraphStyle = "learn" | "obsidian" | "graphify";
 
 const GRAPH_STYLE_KEY = "ua.graphStyle";
 
-function loadGraphStyle(): GraphStyle {
+/** First visit (and the retired "classic" view) open the Learn roadmap, so nobody starts from nothing. */
+export function loadGraphStyle(): GraphStyle {
   try {
     const v = globalThis.localStorage?.getItem(GRAPH_STYLE_KEY);
-    return v === "classic" ? "classic" : "obsidian";
+    return v === "obsidian" || v === "graphify" ? v : "learn";
   } catch {
-    return "obsidian";
+    return "learn";
   }
 }
 
@@ -323,7 +327,7 @@ export const useDashboardStore = create<DashboardStore>()((set, get) => ({
   currentTourStep: 0,
   tourHighlightedNodeIds: [],
 
-  persona: "junior",
+  persona: "non-technical",
 
   diffMode: false,
   changedNodeIds: new Set<string>(),

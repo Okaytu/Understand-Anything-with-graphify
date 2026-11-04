@@ -292,6 +292,18 @@ export function buildNameIndex(graph: KnowledgeGraph): Map<string, string> {
   return index;
 }
 
+/** Which header type chip (Code, Config, Docs …) a node type belongs to. */
+export const NODE_CATEGORY: Record<string, "code" | "config" | "docs" | "infra" | "data" | "domain" | "knowledge"> = {
+  file: "code", function: "code", class: "code", module: "code", concept: "code",
+  config: "config",
+  document: "docs",
+  service: "infra", resource: "infra", pipeline: "infra",
+  table: "data", endpoint: "data", schema: "data",
+  domain: "domain", flow: "domain", step: "domain",
+  article: "knowledge", entity: "knowledge", topic: "knowledge", claim: "knowledge", source: "knowledge",
+  page: "code", screen: "code", component: "code", componentSet: "code", instance: "code", token: "code",
+};
+
 /** Obsidian-like color groups (one per layer), readable on the dark graph background. */
 export const GROUP_COLORS = [
   "#a882ff", // Obsidian purple

@@ -1,10 +1,13 @@
 import { useDashboardStore } from "../store";
 import { useI18n } from "../contexts/I18nContext";
 import type { Persona } from "../store";
+import { SEGMENT_GROUP, segment } from "./header-styles";
 
 export default function PersonaSelector() {
   const persona = useDashboardStore((s) => s.persona);
   const setPersona = useDashboardStore((s) => s.setPersona);
+  const hasTour = useDashboardStore((s) => (s.graph?.tour.length ?? 0) > 0);
+  const startTour = useDashboardStore((s) => s.startTour);
   const { t } = useI18n();
 
   const personas: { id: Persona; label: string; description: string }[] = [
@@ -26,17 +29,17 @@ export default function PersonaSelector() {
   ];
 
   return (
-    <div className="flex items-center gap-1 bg-elevated rounded-lg p-0.5">
+    <div className={SEGMENT_GROUP}>
       {personas.map((p) => (
         <button
           key={p.id}
-          onClick={() => setPersona(p.id)}
+          onClick={() => {
+            setPersona(p.id);
+            // "Guided" means the guided tour: start it in the sidebar
+            if (p.id === "junior" && hasTour) startTour();
+          }}
           title={p.description}
-          className={`px-2.5 py-1 rounded text-[11px] font-medium transition-colors ${
-            persona === p.id
-              ? "bg-accent/20 text-accent"
-              : "text-text-muted hover:text-text-secondary hover:bg-surface"
-          }`}
+          className={segment(persona === p.id)}
         >
           {p.label}
         </button>

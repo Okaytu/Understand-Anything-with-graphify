@@ -54,11 +54,8 @@ export default function OnboardingOverlay({ onDismiss }: Props) {
         aria-labelledby={TITLE_ID}
         style={cardStyle}
       >
-        <div style={tagStyle}>
-          <span style={numStyle}>0{stepIdx + 1}</span>
-          <span> / 0{STEPS.length}</span>
-          <span style={dotStyle} />
-          <span>{t.onboarding.header}</span>
+        <div style={{ fontSize: "0.9rem", color: "var(--color-text-secondary)", marginBottom: 12 }}>
+          {t.learnMode.stepOf.replace("{n}", String(stepIdx + 1)).replace("{total}", String(STEPS.length))}
         </div>
 
         <h2 id={TITLE_ID} style={titleStyle}>
@@ -111,6 +108,7 @@ export default function OnboardingOverlay({ onDismiss }: Props) {
               type="button"
               onClick={() => setStepIdx(stepIdx + 1)}
               style={{ ...btnStyle, ...btnPrimaryStyle }}
+              autoFocus
             >
               {t.onboarding.next}
             </button>
@@ -119,6 +117,7 @@ export default function OnboardingOverlay({ onDismiss }: Props) {
               type="button"
               onClick={() => onDismiss(true)}
               style={{ ...btnStyle, ...btnPrimaryStyle }}
+              autoFocus
             >
               {t.onboarding.finish}
             </button>
@@ -154,34 +153,6 @@ const cardStyle: React.CSSProperties = {
   border: "1px solid var(--color-border-subtle)",
   borderTop: "2px solid var(--color-accent)",
   position: "relative",
-};
-
-const tagStyle: React.CSSProperties = {
-  fontSize: "0.72rem",
-  letterSpacing: "0.3em",
-  color: "var(--color-text-muted)",
-  textTransform: "uppercase",
-  marginBottom: 24,
-  display: "flex",
-  alignItems: "center",
-  flexWrap: "wrap",
-  gap: 4,
-};
-
-const numStyle: React.CSSProperties = {
-  fontFamily: "var(--font-heading)",
-  color: "var(--color-accent)",
-  fontSize: "0.9rem",
-  letterSpacing: "0.1em",
-  marginRight: 4,
-};
-
-const dotStyle: React.CSSProperties = {
-  width: 4,
-  height: 4,
-  background: "var(--color-accent)",
-  borderRadius: "50%",
-  margin: "0 12px",
 };
 
 const titleStyle: React.CSSProperties = {
@@ -233,8 +204,8 @@ const btnRowStyle: React.CSSProperties = {
 const btnStyle: React.CSSProperties = {
   padding: "10px 22px",
   fontSize: "0.82rem",
-  letterSpacing: "0.12em",
-  textTransform: "uppercase",
+  letterSpacing: "normal",
+  textTransform: "none",
   border: "1px solid",
   cursor: "pointer",
   fontFamily: "inherit",

@@ -10,7 +10,18 @@ interface CodeViewerProps {
   presentation?: "sidebar" | "modal";
   onClose?: () => void;
   onExpand?: () => void;
+  dock?: CodeViewerDock;
+  onDock?: (dock: CodeViewerDock) => void;
 }
+
+export type CodeViewerDock = "left" | "bottom" | "right";
+
+// Icon = a window with the docked strip filled on the chosen side.
+const DOCK_RECT: Record<CodeViewerDock, string> = {
+  left: "M4 5h6v14H4z",
+  bottom: "M4 14h16v5H4z",
+  right: "M14 5h6v14h-6z",
+};
 
 interface SourceFile {
   path: string;
@@ -63,6 +74,7 @@ function MarkdownView({ content }: { content: string }) {
   return (
     <div className="px-6 py-5 max-w-3xl text-sm text-text-secondary leading-relaxed">
       <ReactMarkdown
+        skipHtml
         remarkPlugins={[remarkGfm]}
         components={{
           h1: ({ children }) => <h1 className="text-xl font-heading text-text-primary mt-6 mb-3 first:mt-0">{children}</h1>,
@@ -70,7 +82,7 @@ function MarkdownView({ content }: { content: string }) {
           h3: ({ children }) => <h3 className="text-base font-heading text-text-primary mt-4 mb-2 first:mt-0">{children}</h3>,
           h4: ({ children }) => <h4 className="text-sm font-heading text-text-primary mt-3 mb-1.5 first:mt-0">{children}</h4>,
           h5: ({ children }) => <h5 className="text-sm font-heading text-text-primary mt-3 mb-1.5 first:mt-0">{children}</h5>,
-          h6: ({ children }) => <h6 className="text-xs font-heading text-text-primary mt-3 mb-1.5 first:mt-0 uppercase tracking-wider">{children}</h6>,
+          h6: ({ children }) => <h6 className="text-xs font-heading text-text-primary mt-3 mb-1.5 first:mt-0">{children}</h6>,
           p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
           a: ({ children, href }) => (
             <a href={href} target="_blank" rel="noreferrer" className="text-accent hover:underline">
@@ -123,6 +135,8 @@ export default function CodeViewer({
   presentation = "sidebar",
   onClose,
   onExpand,
+  dock,
+  onDock,
 }: CodeViewerProps) {
   const graph = useDashboardStore((s) => s.graph);
   const domainGraph = useDashboardStore((s) => s.domainGraph);
@@ -213,7 +227,7 @@ export default function CodeViewer({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
             <span
-              className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded border"
+              className="text-xs font-semibold px-2 py-0.5 rounded border"
               style={{
                 color: "var(--color-node-file)",
                 borderColor: "color-mix(in srgb, var(--color-node-file) 30%, transparent)",
@@ -233,16 +247,37 @@ export default function CodeViewer({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
+          {onDock &&
+            (["left", "bottom", "right"] as const).map((d) => {
+              const label =
+                d === "left" ? t.codeViewer.dockLeft : d === "bottom" ? t.codeViewer.dockBottom : t.codeViewer.dockRight;
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => onDock(d)}
+                  aria-pressed={dock === d}
+                  className={`w-9 h-9 inline-flex items-center justify-center rounded-lg transition-colors hover:bg-surface ${dock === d ? "text-accent" : "text-text-secondary hover:text-text-primary"}`}
+                  title={label}
+                  aria-label={label}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <rect x="3.5" y="4.5" width="17" height="15" rx="2" strokeWidth={1.8} />
+                    <path d={DOCK_RECT[d]} fill="currentColor" stroke="none" />
+                  </svg>
+                </button>
+              );
+            })}
           {onExpand && (
             <button
               type="button"
               onClick={onExpand}
-              className="text-text-muted hover:text-text-primary transition-colors"
+              className="w-9 h-9 inline-flex items-center justify-center rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface transition-colors"
               title={t.codeViewer.openLarger}
               aria-label={t.codeViewer.openLarger}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6" />
               </svg>
             </button>
@@ -250,11 +285,11 @@ export default function CodeViewer({
           <button
             type="button"
             onClick={handleClose}
-            className="text-text-muted hover:text-text-primary transition-colors"
+            className="w-9 h-9 inline-flex items-center justify-center rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface transition-colors"
             title={isModal ? t.codeViewer.closeExpanded : t.codeViewer.closeViewer}
             aria-label={isModal ? t.codeViewer.closeExpanded : t.codeViewer.closeViewer}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -287,7 +322,7 @@ export default function CodeViewer({
                         key={view}
                         type="button"
                         onClick={() => setMdView(view)}
-                        className={`px-2 py-0.5 text-[10px] uppercase tracking-wider transition-colors ${
+                        className={`h-8 px-3 text-[13px] transition-colors ${
                           mdView === view
                             ? "bg-accent/15 text-accent"
                             : "text-text-muted hover:text-text-primary"
@@ -307,8 +342,8 @@ export default function CodeViewer({
             <Highlight code={source.content} language={language} theme={themes.vsDark}>
               {({ className, style, tokens, getLineProps, getTokenProps }) => (
                 <pre
-                  className={`${className} min-w-max p-0 m-0 ${
-                    isModal ? "text-xs leading-5" : "text-[11px] leading-5"
+                  className={`${className} w-full p-0 m-0 ${
+                    isModal ? "text-sm leading-6" : "text-[13px] leading-6"
                   } font-mono`}
                   style={{ ...style, background: "transparent" }}
                 >
@@ -330,7 +365,7 @@ export default function CodeViewer({
                         <span className="w-12 shrink-0 select-none border-r border-border-subtle pr-3 text-right text-text-muted bg-surface/60">
                           {lineNumber}
                         </span>
-                        <span className="pl-3 pr-6 whitespace-pre">
+                        <span className="min-w-0 flex-1 pl-3 pr-6 whitespace-pre-wrap break-words">
                           {line.map((token, key) => (
                             <span key={key} {...getTokenProps({ token })} />
                           ))}

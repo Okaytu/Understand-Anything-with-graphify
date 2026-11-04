@@ -3,7 +3,6 @@ import { useDashboardStore } from "../store";
 import { useI18n } from "../contexts/I18nContext";
 import PersonaSelector from "./PersonaSelector";
 import DiffToggle from "./DiffToggle";
-import LayerLegend from "./LayerLegend";
 import FilterPanel from "./FilterPanel";
 import ExportMenu from "./ExportMenu";
 import { ThemePicker } from "./ThemePicker";
@@ -25,7 +24,7 @@ interface NodeTypeFilterDef {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted mb-3">
+    <h3 className="text-xs font-semibold text-text-muted mb-3">
       {children}
     </h3>
   );
@@ -110,7 +109,7 @@ export default function MobileDrawer({
         {/* Drawer header */}
         <header className="flex items-center justify-between px-5 py-4 border-b border-border-subtle shrink-0">
           <div>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">
+            <span className="text-xs font-semibold text-accent">
               {t.drawer.controls}
             </span>
             <h2 className="font-heading text-lg text-text-primary mt-0.5 leading-none">
@@ -137,32 +136,36 @@ export default function MobileDrawer({
 
         {/* Body */}
         <div className="flex-1 overflow-auto px-5 py-5 space-y-7">
-          <section>
-            <SectionLabel>{t.drawer.role}</SectionLabel>
-            <PersonaSelector />
-          </section>
-
-          {graph && viewMode !== "domain" && (
+          {graph && (
             <section>
               <SectionLabel>{t.obsidian.graphStyle}</SectionLabel>
               <div className="inline-flex items-center bg-elevated rounded-lg p-0.5">
-                {(["obsidian", "classic"] as const).map((style) => (
+                {(["learn", "obsidian", "graphify"] as const).map((style) => (
                   <button
                     key={style}
                     type="button"
                     onClick={() => setGraphStyle(style)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    className={`h-10 px-4 text-sm font-medium rounded-md transition-colors ${
                       graphStyle === style
                         ? "bg-accent/20 text-accent"
-                        : "text-text-muted hover:text-text-secondary"
+                        : "text-text-secondary hover:text-text-primary"
                     }`}
                   >
-                    {style === "obsidian" ? t.obsidian.obsidian : t.obsidian.classic}
+                    {style === "learn" ? t.obsidian.learn : style === "obsidian" ? t.obsidian.obsidian : t.obsidian.graphify}
                   </button>
                 ))}
               </div>
             </section>
           )}
+
+          {graphStyle === "obsidian" && (
+            <section>
+              <SectionLabel>{t.drawer.role}</SectionLabel>
+              <PersonaSelector />
+            </section>
+          )}
+
+
 
           {showViewToggle && (
             <section>
@@ -194,6 +197,8 @@ export default function MobileDrawer({
             </section>
           )}
 
+          {graphStyle === "obsidian" && (
+            <>
           <section>
             <SectionLabel>{t.drawer.diffOverlay}</SectionLabel>
             <DiffToggle />
@@ -209,7 +214,7 @@ export default function MobileDrawer({
                     key={cat.key}
                     type="button"
                     onClick={() => toggleNodeTypeFilter(cat.key)}
-                    className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded border transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+                    className={`h-9 inline-flex items-center gap-2 px-3 rounded-lg border text-[13px] font-medium whitespace-nowrap transition-colors ${
                       active
                         ? "border-border-medium bg-elevated text-text-secondary"
                         : "border-transparent bg-transparent text-text-muted/40 line-through"
@@ -229,13 +234,8 @@ export default function MobileDrawer({
             </div>
           </section>
 
-          {graph && (graph.layers?.length ?? 0) > 0 && (
-            <section>
-              <SectionLabel>{t.drawer.layers}</SectionLabel>
-              <div className="-mx-1">
-                <LayerLegend />
-              </div>
-            </section>
+
+            </>
           )}
 
           <section>

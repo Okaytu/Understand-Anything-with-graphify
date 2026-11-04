@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { HEADER_BUTTON } from "./header-styles";
 import { useDashboardStore } from "../store";
 import { useI18n } from "../contexts/I18nContext";
 import type { KnowledgeGraph } from "@understand-anything/core/types";
@@ -101,7 +102,26 @@ export default function ExportMenu() {
     return { svgContent, width, height };
   };
 
+  // The Obsidian map is drawn on a canvas: export it as it is shown.
+  const visibleMapCanvas = () => {
+    const c = document.querySelector<HTMLCanvasElement>("[data-ua-map] canvas");
+    return c && c.offsetParent !== null ? c : null;
+  };
+
   const exportPNG = async () => {
+    const mapCanvas = visibleMapCanvas();
+    if (!reactFlowInstance && mapCanvas) {
+      mapCanvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${graph?.project.name ?? "graph"}-map.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }, "image/png");
+      return;
+    }
     if (!reactFlowInstance) {
       alert("Graph not ready for export");
       return;
@@ -219,7 +239,7 @@ export default function ExportMenu() {
     <div ref={containerRef} className="relative">
       <button
         onClick={toggleExportMenu}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-elevated text-text-secondary hover:text-text-primary transition-colors"
+        className={`${HEADER_BUTTON} bg-elevated text-text-secondary hover:text-text-primary`}
         title={t.export.title}
       >
         <svg
@@ -243,7 +263,7 @@ export default function ExportMenu() {
           <div className="p-2">
             <button
               onClick={exportPNG}
-              disabled={!reactFlowInstance}
+              disabled={!reactFlowInstance && !visibleMapCanvas()}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm text-text-primary hover:bg-elevated transition-colors rounded-lg text-left disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -251,6 +271,7 @@ export default function ExportMenu() {
               </svg>
               <span>{t.export.asPNG}</span>
             </button>
+            {reactFlowInstance && (
             <button
               onClick={exportSVG}
               disabled={!reactFlowInstance}
@@ -261,6 +282,7 @@ export default function ExportMenu() {
               </svg>
               <span>{t.export.asSVG}</span>
             </button>
+            )}
             <button
               onClick={exportJSON}
               disabled={!graph}

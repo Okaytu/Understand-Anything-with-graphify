@@ -1,11 +1,11 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, useRef } from "react";
 import type { GraphIssue } from "@understand-anything/core/schema";
 import { useDashboardStore } from "../store";
 import { useI18n } from "../contexts/I18nContext";
-import GraphView from "./GraphView";
 import DomainGraphView from "./DomainGraphView";
-import KnowledgeGraphView from "./KnowledgeGraphView";
 import ObsidianGraphView from "./ObsidianGraphView";
+import LearnMode from "./LearnMode";
+import GraphifyFrame from "./GraphifyFrame";
 import ObsidianSidebar from "./ObsidianSidebar";
 import SearchBar from "./SearchBar";
 import NodeInfo from "./NodeInfo";
@@ -48,8 +48,9 @@ export default function MobileLayout({
   const persona = useDashboardStore((s) => s.persona);
   const viewMode = useDashboardStore((s) => s.viewMode);
   const graphStyle = useDashboardStore((s) => s.graphStyle);
-  const obsidianActive = graphStyle === "obsidian" && viewMode !== "domain";
   const domainGraph = useDashboardStore((s) => s.domainGraph);
+  const domainActive = graphStyle === "obsidian" && viewMode === "domain" && !!domainGraph;
+  const obsidianActive = graphStyle === "obsidian" && !domainActive;
   const codeViewerOpen = useDashboardStore((s) => s.codeViewerOpen);
   const closeCodeViewer = useDashboardStore((s) => s.closeCodeViewer);
   const pathFinderOpen = useDashboardStore((s) => s.pathFinderOpen);
@@ -64,9 +65,13 @@ export default function MobileLayout({
   // on a small screen where graph and sidebar can't coexist
   // (Obsidian style: a tap pins the connection box on the graph instead, and its
   // "Open note" button switches to Info.)
+  // Only a new selection pivots (switching pages must not jump to Info), and only off the dot
+  // map, where a picked part would otherwise not be visible (e.g. a search on Learn).
+  const pivotRef = useRef(!obsidianActive);
+  pivotRef.current = !obsidianActive;
   useEffect(() => {
-    if (selectedNodeId && !obsidianActive) setActiveTab("info");
-  }, [selectedNodeId, obsidianActive]);
+    if (selectedNodeId && pivotRef.current) setActiveTab("info");
+  }, [selectedNodeId]);
 
   // When a code viewer opens (e.g. from the Files tab) keep focus there
   useEffect(() => {
@@ -167,14 +172,14 @@ export default function MobileLayout({
           }`}
           aria-hidden={activeTab !== "graph"}
         >
-          {obsidianActive ? (
-            <ObsidianGraphView onOpenNote={() => setActiveTab("info")} />
-          ) : viewMode === "knowledge" ? (
-            <KnowledgeGraphView />
-          ) : viewMode === "domain" && domainGraph ? (
+          {graphStyle === "learn" ? (
+            <LearnMode />
+          ) : graphStyle === "graphify" ? (
+            <GraphifyFrame accessToken={accessToken} />
+          ) : domainActive ? (
             <DomainGraphView />
           ) : (
-            <GraphView />
+            <ObsidianGraphView onOpenNote={() => setActiveTab("info")} />
           )}
         </div>
 

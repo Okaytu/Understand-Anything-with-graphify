@@ -282,6 +282,63 @@ export function createDashboardDataMiddleware(
   };
 }
 
+const GRAPHIFY_PAGE_PATH = "/graphify/graph.html";
+
+const NO_GRAPHIFY_PAGE = `<!doctype html><meta charset="utf-8"><title>Graphify</title>
+<body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#111;color:#ccc;font:15px/1.6 system-ui,sans-serif;text-align:center;padding:24px">
+<div><h2 style="color:#eee;margin:0 0 8px">No graphify map yet</h2>
+<p>Map the project first: <code>bridge/run.sh &lt;your project&gt;</code>, then reload this page.</p></div></body>`;
+
+function graphifyPageCandidates(): string[] {
+  const graphDir = process.env.GRAPH_DIR;
+  const roots = [
+    ...(graphDir ? [graphDir] : []),
+    process.cwd(),
+    path.resolve(process.cwd(), "../../.."),
+  ];
+  return roots.map((root) => path.resolve(root, "graphify-out", "graph.html"));
+}
+
+/**
+ * graphify's own map (graph.html with its explain panel), shown inside the dashboard's
+ * Graphify tab. The page embeds the project's source code for its AI prompts, so it is
+ * behind the same one-time token as the data endpoints, and it sends no referrer.
+ */
+export function createGraphifyPageMiddleware(
+  accessToken: string,
+): DashboardDataMiddleware {
+  return (req, res, next) => {
+    const url = new URL(req.url ?? "/", "http://127.0.0.1:5173");
+    if (url.pathname !== GRAPHIFY_PAGE_PATH) {
+      next();
+      return;
+    }
+
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
+    if (url.searchParams.get("token") !== accessToken) {
+      sendJson(res, 403, { error: "Forbidden: missing or invalid token" });
+      return;
+    }
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    const page = graphifyPageCandidates().find((candidate) => fs.existsSync(candidate));
+    if (!page) {
+      res.statusCode = 404;
+      res.end(NO_GRAPHIFY_PAGE);
+      return;
+    }
+    try {
+      res.end(fs.readFileSync(page));
+    } catch {
+      res.statusCode = 500;
+      res.end("Failed to read the graphify map");
+    }
+  };
+}
+
 type DashboardViteConfig = UserConfig & {
   test: {
     environment: "node";
@@ -358,6 +415,7 @@ const config: DashboardViteConfig = {
         });
 
         server.middlewares.use(createDashboardDataMiddleware(ACCESS_TOKEN));
+        server.middlewares.use(createGraphifyPageMiddleware(ACCESS_TOKEN));
 
         server.middlewares.use((req, res, next) => {
           const url = new URL(req.url ?? "/", "http://127.0.0.1:5173");

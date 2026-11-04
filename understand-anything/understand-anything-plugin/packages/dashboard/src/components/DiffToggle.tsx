@@ -1,4 +1,5 @@
 import { useDashboardStore } from "../store";
+import { HEADER_BUTTON } from "./header-styles";
 import { useI18n } from "../contexts/I18nContext";
 
 export default function DiffToggle() {
@@ -9,13 +10,15 @@ export default function DiffToggle() {
   const { t } = useI18n();
 
   const hasDiff = changedNodeIds.size > 0;
+  // nothing to compare against: hide the switch instead of showing a dead "Diff OFF"
+  if (!hasDiff) return null;
 
   return (
     <div className="flex items-center gap-2">
       <button
         onClick={toggleDiffMode}
         disabled={!hasDiff}
-        className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+        className={`${HEADER_BUTTON} ${
           diffMode && hasDiff
             ? "bg-[var(--color-diff-changed-dim)] text-[var(--color-diff-changed)]"
             : hasDiff

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDashboardStore } from "../store";
 import type {
   DashboardFreshnessReport,
   GraphFreshnessResult,
@@ -164,7 +165,10 @@ export function buildFreshnessBanner(
 export default function StalenessBanner({ freshness }: StalenessBannerProps) {
   const [expanded, setExpanded] = useState(false);
   const content = buildFreshnessBanner(freshness);
-  const foldKey = content ? `ua-banner-folded:${content.title}` : "";
+  const projectName = useDashboardStore((s) => s.graph?.project.name ?? "");
+  const mappedByGraphify = useDashboardStore((s) => !!s.graph?.project.description?.includes("graphify-bridge"));
+  // folded = hidden for this project and this exact situation; a new warning shows again
+  const foldKey = content ? `ua-banner-folded:${projectName}:${content.title}:${content.summary}` : "";
   const [, setFoldedTick] = useState(0);
 
   if (!content) return null;
@@ -184,21 +188,28 @@ export default function StalenessBanner({ freshness }: StalenessBannerProps) {
     setFoldedTick((n) => n + 1);
   };
 
+  // the same facts in plain words (the builder's wording is kept for its tests and other tools)
+  const changed = content.changedFiles.length;
+  const plain = content.title.includes("working-tree")
+    ? { title: "The map does not show your latest changes yet", summary: `${changed} file${changed === 1 ? "" : "s"} changed since this map was made, so some explanations may be out of date.` }
+    : content.title.includes("may be stale")
+      ? { title: "The map may be out of date", summary: "The code has changed since this map was made, so some explanations may be out of date." }
+      : { title: content.title, summary: content.summary };
   const hasFiles = content.changedFiles.length > 0;
   const visibleFiles = content.changedFiles.slice(0, 8);
   const hiddenFileCount = content.changedFiles.length - visibleFiles.length;
 
   return (
-    <div className="bg-amber-950/30 border-b border-amber-700 text-amber-100 text-sm">
+    <div className="bg-amber-500/10 border-b border-amber-500/40 border-l-4 border-l-amber-500 text-text-primary text-sm">
       <div className="flex items-start">
       <button
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((prev) => !prev)}
-        className="flex-1 min-w-0 flex items-start gap-3 px-5 py-3 text-left hover:bg-amber-900/10 transition-colors"
+        className="flex-1 min-w-0 flex items-start gap-3 px-5 py-3 text-left hover:bg-amber-500/5 transition-colors"
       >
         <svg
-          className="w-4 h-4 shrink-0 mt-0.5 text-amber-400"
+          className="w-4 h-4 shrink-0 mt-0.5 text-amber-500"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -211,13 +222,17 @@ export default function StalenessBanner({ freshness }: StalenessBannerProps) {
           />
         </svg>
         <span className="flex-1 min-w-0">
-          <span className="block font-semibold">{content.title}</span>
-          <span className="block text-amber-100/80">{content.summary}</span>
-          <span className="block text-amber-100/70">{content.action}</span>
+          <span className="block font-semibold">{plain.title}</span>
+          <span className="hidden sm:block text-text-secondary">{plain.summary}</span>
+          <span className="hidden sm:block text-text-secondary">
+            {mappedByGraphify && content.action.startsWith("Run /understand")
+              ? "To update it, run bridge/refresh.sh on this project, or ask your coding agent to."
+              : content.action}
+          </span>
         </span>
         {hasFiles && (
-          <span className="text-xs text-amber-300/70 shrink-0">
-            {expanded ? "hide files" : "show files"}
+          <span className="text-sm text-text-secondary shrink-0 underline underline-offset-2">
+            {expanded ? "Hide changed files" : "Show changed files"}
           </span>
         )}
       </button>
@@ -225,25 +240,25 @@ export default function StalenessBanner({ freshness }: StalenessBannerProps) {
         type="button"
         onClick={fold}
         title="Fold this banner and don't show it again"
-        className="shrink-0 px-4 py-3 text-xs text-amber-300/70 hover:text-amber-100 transition-colors"
+        className="shrink-0 px-4 py-3 text-sm text-text-secondary hover:text-text-primary underline underline-offset-2 transition-colors"
       >
-        fold
+        Fold
       </button>
       </div>
 
       {expanded && hasFiles && (
         <div className="px-5 pb-3">
-          <div className="border-t border-amber-700/40 pt-2 flex flex-wrap gap-1.5">
+          <div className="border-t border-amber-500/30 pt-2 flex flex-wrap gap-1.5">
             {visibleFiles.map((file) => (
               <code
                 key={file}
-                className="px-1.5 py-0.5 rounded bg-amber-900/30 text-[11px] text-amber-100"
+                className="px-1.5 py-0.5 rounded bg-elevated text-[11px] text-text-primary"
               >
                 {file}
               </code>
             ))}
             {hiddenFileCount > 0 && (
-              <span className="text-xs text-amber-200/60">
+              <span className="text-xs text-text-muted">
                 +{hiddenFileCount} more
               </span>
             )}

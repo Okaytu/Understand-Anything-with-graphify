@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { useDashboardStore } from "../store";
 import { useI18n } from "../contexts/I18nContext";
+import { HEADER_BUTTON } from "./header-styles";
+import { groupColor } from "../utils/obsidian-graph";
 
 // Shared layer color palette — used by LayerLegend, LayerClusterNode, PortalNode, and GraphView
 export const LAYER_PALETTE = [
@@ -21,6 +24,7 @@ export default function LayerLegend() {
   const navigationLevel = useDashboardStore((s) => s.navigationLevel);
   const activeLayerId = useDashboardStore((s) => s.activeLayerId);
   const { t } = useI18n();
+  const [open, setOpen] = useState(false);
 
   const layers = graph?.layers ?? [];
   const hasLayers = layers.length > 0;
@@ -30,16 +34,25 @@ export default function LayerLegend() {
   const activeLayer = layers.find((l) => l.id === activeLayerId);
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-[11px] font-medium text-text-secondary whitespace-nowrap">
+    // "contents": the toggle sits in the header's filter row; the opened list takes its own line
+    <div className="contents">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={`${HEADER_BUTTON} bg-elevated text-text-secondary hover:text-text-primary`}
+      >
+        {open ? "▾" : "▸"}{" "}
         {navigationLevel === "overview"
           ? `${layers.length} ${t.layer.label}`
           : activeLayer?.name ?? t.layer.defaultName}
-      </span>
+      </button>
 
-      <div className="flex items-center gap-3">
+      {open && (
+      <div className="basis-full flex flex-wrap items-center gap-x-3 gap-y-1 pb-1">
         {layers.map((layer, i) => {
-          const color = getLayerColor(i);
+          // same colour as this group's dots on the Obsidian map
+          const color = { label: groupColor(i) };
           const isActive = navigationLevel === "layer-detail" && layer.id === activeLayerId;
           return (
             <div key={layer.id} className="flex items-center gap-1 whitespace-nowrap">
@@ -67,6 +80,7 @@ export default function LayerLegend() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

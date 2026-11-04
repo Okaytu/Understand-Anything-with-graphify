@@ -2,14 +2,15 @@ import { useEffect, useState, useMemo, useCallback, lazy, Suspense } from "react
 import { validateGraph } from "@understand-anything/core/schema";
 import type { GraphIssue } from "@understand-anything/core/schema";
 import { useDashboardStore } from "./store";
-import GraphView from "./components/GraphView";
 import DomainGraphView from "./components/DomainGraphView";
-import KnowledgeGraphView from "./components/KnowledgeGraphView";
 import ObsidianGraphView from "./components/ObsidianGraphView";
+import LearnMode from "./components/LearnMode";
+import GraphifyFrame from "./components/GraphifyFrame";
+import { FOCUS_RING, HEADER_BUTTON, HEADER_ICON_BUTTON, SEGMENT_GROUP, segment } from "./components/header-styles";
 import ObsidianSidebar from "./components/ObsidianSidebar";
+import type { CodeViewerDock } from "./components/CodeViewer";
 import SearchBar from "./components/SearchBar";
 import NodeInfo from "./components/NodeInfo";
-import LayerLegend from "./components/LayerLegend";
 import DiffToggle from "./components/DiffToggle";
 import FilterPanel from "./components/FilterPanel";
 import ExportMenu from "./components/ExportMenu";
@@ -296,10 +297,6 @@ function DashboardContent({
   const togglePathFinder = useDashboardStore((s) => s.togglePathFinder);
   const nodeTypeFilters = useDashboardStore((s) => s.nodeTypeFilters);
   const toggleNodeTypeFilter = useDashboardStore((s) => s.toggleNodeTypeFilter);
-  const detailLevel = useDashboardStore((s) => s.detailLevel);
-  const setDetailLevel = useDashboardStore((s) => s.setDetailLevel);
-  const showFunctionsInClassView = useDashboardStore((s) => s.showFunctionsInClassView);
-  const toggleShowFunctionsInClassView = useDashboardStore((s) => s.toggleShowFunctionsInClassView);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("info");
   const [showOnboarding, setShowOnboarding] = useState(shouldShowOnboarding);
@@ -320,6 +317,44 @@ function DashboardContent({
   // Obsidian style: the sidebar can be hidden so the graph gets the whole width;
   // below 1100px it slides over the graph instead of squeezing it.
   const isNarrow = useIsMobile(1100);
+  const [codeDock, setCodeDock] = useState<CodeViewerDock>(() => {
+    try {
+      const v = window.localStorage.getItem("ua-code-dock");
+      return v === "left" || v === "right" ? v : "bottom";
+    } catch {
+      return "bottom";
+    }
+  });
+  const dockCodeViewer = (d: CodeViewerDock) => {
+    setCodeDock(d);
+    try {
+      window.localStorage.setItem("ua-code-dock", d);
+    } catch {
+      // storage unavailable: dock choice lasts this session only
+    }
+  };
+  // the Obsidian page's second header row (Diff, category chips, layers) can be hidden; remembered
+  const [mapFilters, setMapFilters] = useState(() => {
+    try {
+      return window.localStorage.getItem("ua.mapFilters") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const toggleMapFilters = () => {
+    setMapFilters((shown) => {
+      try {
+        window.localStorage.setItem("ua.mapFilters", shown ? "0" : "1");
+      } catch {
+        // storage unavailable: the choice lasts this session only
+      }
+      return !shown;
+    });
+  };
+  const [visitedPages, setVisitedPages] = useState(() => new Set([graphStyle]));
+  useEffect(() => {
+    setVisitedPages((prev) => (prev.has(graphStyle) ? prev : new Set(prev).add(graphStyle)));
+  }, [graphStyle]);
   const [obsSidebarOpen, setObsSidebarOpen] = useState(
     () => typeof window === "undefined" || window.innerWidth >= 1100,
   );
@@ -380,10 +415,12 @@ function DashboardContent({
         key: "/",
         description: t.keyboardShortcuts.focusSearch,
         action: () => {
-          const searchInput = document.querySelector<HTMLInputElement>(
-            '[data-testid="search-input"]'
-          );
-          searchInput?.focus();
+          // the search bar lives on the Obsidian page: go there first
+          const st = useDashboardStore.getState();
+          if (st.graphStyle !== "obsidian") st.setGraphStyle("obsidian");
+          setTimeout(() => {
+            document.querySelector<HTMLInputElement>('[data-testid="search-input"]')?.focus();
+          }, 50);
         },
         category: "Navigation",
       },
@@ -393,7 +430,8 @@ function DashboardContent({
         description: t.keyboardShortcuts.nextStep,
         action: () => {
           const state = useDashboardStore.getState();
-          if (state.tourActive) {
+          // the tour lives on the Obsidian page (Learn uses the arrow keys for its own steps)
+          if (state.tourActive && state.graphStyle === "obsidian") {
             state.nextTourStep();
           }
         },
@@ -404,7 +442,7 @@ function DashboardContent({
         description: t.keyboardShortcuts.prevStep,
         action: () => {
           const state = useDashboardStore.getState();
-          if (state.tourActive) {
+          if (state.tourActive && state.graphStyle === "obsidian") {
             state.prevTourStep();
           }
         },
@@ -416,7 +454,7 @@ function DashboardContent({
         description: t.keyboardShortcuts.toggleDiff,
         action: () => {
           const state = useDashboardStore.getState();
-          state.toggleDiffMode();
+          if (state.graphStyle === "obsidian") state.toggleDiffMode();
         },
         category: "View",
       },
@@ -425,6 +463,14 @@ function DashboardContent({
         description: t.keyboardShortcuts.toggleFilter,
         action: () => {
           const state = useDashboardStore.getState();
+          // Filter lives in the Obsidian page's filter row: only there, and show the row if hidden
+          if (state.graphStyle !== "obsidian") return;
+          setMapFilters(true);
+          try {
+            window.localStorage.setItem("ua.mapFilters", "1");
+          } catch {
+            // storage unavailable: shown for this session only
+          }
           state.toggleFilterPanel();
         },
         category: "View",
@@ -458,7 +504,12 @@ function DashboardContent({
   // NodeInfo always takes priority when a node is selected.
   // Learn mode adds LearnPanel below it; otherwise ProjectOverview shows when idle.
   const isLearnMode = tourActive || persona === "junior";
-  const obsidianActive = graphStyle === "obsidian" && viewMode !== "domain";
+  // Three pages: the Learn roadmap, the Obsidian dot map (or the domain map when that view is
+  // picked), and graphify's own map with its explain panel.
+  const domainActive = graphStyle === "obsidian" && viewMode === "domain" && !!domainGraph;
+  const obsidianActive = graphStyle === "obsidian" && !domainActive;
+  // on narrow screens the sidebar overlays the right edge, so a right-docked viewer moves to the bottom
+  const dock = isNarrow && obsidianActive && obsSidebarOpen && codeDock === "right" ? "bottom" : codeDock;
   const infoSidebarContent = (
     <>
       {obsidianActive ? (
@@ -485,7 +536,7 @@ function DashboardContent({
             key={tab}
             type="button"
             onClick={() => setSidebarTab(tab)}
-            className={`flex-1 px-3 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-colors ${
+            className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
               sidebarTab === tab
                 ? "bg-accent/15 text-accent"
                 : "text-text-muted hover:text-text-primary hover:bg-elevated"
@@ -494,17 +545,6 @@ function DashboardContent({
             {tab === "info" ? t.sidebar.info : t.sidebar.files}
           </button>
         ))}
-        {obsidianActive && (
-          <button
-            type="button"
-            onClick={() => setObsSidebarOpen(false)}
-            title={t.obsidian.toggleSidebar}
-            aria-label={t.obsidian.toggleSidebar}
-            className="shrink-0 w-7 h-7 rounded-md text-text-muted hover:text-text-primary hover:bg-elevated"
-          >
-            ⇥
-          </button>
-        )}
       </div>
       <div className="flex-1 min-h-0 overflow-auto">
         {sidebarTab === "files" ? <FileExplorer /> : infoSidebarContent}
@@ -527,50 +567,57 @@ function DashboardContent({
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-root text-text-primary noise-overlay">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-root text-text-primary noise-overlay">
       {/* Header */}
-      <header className="flex items-center px-3 sm:px-5 py-3 bg-surface border-b border-border-subtle shrink-0 gap-2 sm:gap-4">
-        {/* Left — shrinks and scrolls on narrow windows so the right-hand actions stay visible */}
-        <div className="flex items-center gap-3 sm:gap-5 min-w-0 overflow-x-auto scrollbar-hide">
-          <h1 className="font-heading text-base sm:text-lg text-text-primary tracking-wide truncate shrink-0 max-w-[160px] sm:max-w-[220px] lg:max-w-none">
+      <header className="flex flex-wrap items-center px-3 sm:px-5 py-3 bg-surface border-b border-border-subtle shrink-0 gap-x-2 sm:gap-x-4 gap-y-2">
+        {/* Left — wraps onto another row on narrow windows, so nothing is hidden or scrolled away */}
+        <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-5 gap-y-2">
+          <h1 className="font-heading text-base sm:text-lg text-text-primary tracking-wide shrink-0">
             {graph?.project.name ?? t.common.appName}
           </h1>
           <div className="w-px h-5 bg-border-subtle hidden sm:block" />
-          <PersonaSelector />
-          {graph && viewMode !== "domain" && (
+          {graph && (
+            <div className={SEGMENT_GROUP} role="tablist" title={t.obsidian.graphStyle}>
+              {(["learn", "obsidian", "graphify"] as const).map((style) => (
+                <button
+                  key={style}
+                  type="button"
+                  role="tab"
+                  aria-selected={graphStyle === style}
+                  onClick={() => setGraphStyle(style)}
+                  className={segment(graphStyle === style)}
+                >
+                  {style === "learn" ? t.obsidian.learn : style === "obsidian" ? t.obsidian.obsidian : t.obsidian.graphify}
+                </button>
+              ))}
+            </div>
+          )}
+          {graphStyle === "obsidian" && (
             <>
               <div className="w-px h-5 bg-border-subtle" />
-              <div className="flex items-center bg-elevated rounded-lg p-0.5" title={t.obsidian.graphStyle}>
-                {(["obsidian", "classic"] as const).map((style) => (
-                  <button
-                    key={style}
-                    type="button"
-                    onClick={() => setGraphStyle(style)}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                      graphStyle === style
-                        ? "bg-accent/20 text-accent"
-                        : "text-text-muted hover:text-text-secondary"
-                    }`}
-                  >
-                    {style === "obsidian" ? t.obsidian.obsidian : t.obsidian.classic}
-                  </button>
-                ))}
-              </div>
+              <PersonaSelector />
+              <button
+                type="button"
+                onClick={toggleMapFilters}
+                aria-expanded={mapFilters}
+                className={`${HEADER_BUTTON} bg-elevated text-text-secondary hover:text-text-primary`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={mapFilters ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                </svg>
+                {mapFilters ? t.obsidian.hideFilters : t.obsidian.showFilters}
+              </button>
             </>
           )}
-          {graph && !isKnowledgeGraph && domainGraph && (
+          {graph && graphStyle === "obsidian" && !isKnowledgeGraph && domainGraph && (
             <>
               <div className="w-px h-5 bg-border-subtle" />
-              <div className="flex items-center bg-elevated rounded-lg p-0.5">
+              <div className={SEGMENT_GROUP}>
                 <button
                   type="button"
                   onClick={() => setViewMode("domain")}
                   title={t.drawer.domain}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                    viewMode === "domain"
-                      ? "bg-accent/20 text-accent"
-                      : "text-text-muted hover:text-text-secondary"
-                  }`}
+                  className={segment(viewMode === "domain")}
                 >
                   {t.drawer.domain}
                 </button>
@@ -578,11 +625,7 @@ function DashboardContent({
                   type="button"
                   onClick={() => setViewMode("structural")}
                   title={t.drawer.structural}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                    viewMode === "structural"
-                      ? "bg-accent/20 text-accent"
-                      : "text-text-muted hover:text-text-secondary"
-                  }`}
+                  className={segment(viewMode === "structural")}
                 >
                   {t.drawer.structural}
                 </button>
@@ -591,100 +634,14 @@ function DashboardContent({
           )}
         </div>
 
-        {/* Middle — scrollable legends */}
-        <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide">
-          <div className="flex items-center gap-4 w-max">
-            <DiffToggle />
-            {/* Detail level: file view (architecture) / class view (code structure) */}
-            {!isKnowledgeGraph && viewMode !== "domain" && !obsidianActive && (
-              <>
-                <div className="w-px h-5 bg-border-subtle" />
-                <div className="flex items-center bg-elevated rounded-lg p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setDetailLevel("file")}
-                    title={t.detailLevel.filesTitle}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                      detailLevel === "file"
-                        ? "bg-accent/20 text-accent"
-                        : "text-text-muted hover:text-text-secondary"
-                    }`}
-                  >
-                    {t.detailLevel.files}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDetailLevel("class")}
-                    title={t.detailLevel.classesTitle}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                      detailLevel === "class"
-                        ? "bg-accent/20 text-accent"
-                        : "text-text-muted hover:text-text-secondary"
-                    }`}
-                  >
-                    {t.detailLevel.classes}
-                  </button>
-                </div>
-                {detailLevel === "class" && (
-                  <button
-                    type="button"
-                    onClick={toggleShowFunctionsInClassView}
-                    title={t.detailLevel.fnTitle}
-                    className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded border transition-colors ${
-                      showFunctionsInClassView
-                        ? "border-amber-500/50 bg-amber-500/10 text-amber-400"
-                        : "border-border-medium bg-elevated text-text-muted hover:text-text-secondary"
-                    }`}
-                  >
-                    {t.detailLevel.fn}
-                  </button>
-                )}
-              </>
-            )}
-            <div className="flex items-center gap-1">
-              {(isKnowledgeGraph ? [
-                { key: "knowledge" as const, label: t.nodeTypeLabels.all, color: "var(--color-node-article)" },
-              ] : [
-                { key: "code" as const, label: t.nodeTypeLabels.code, color: "var(--color-node-file)" },
-                { key: "config" as const, label: t.nodeTypeLabels.config, color: "var(--color-node-config)" },
-                { key: "docs" as const, label: t.nodeTypeLabels.docs, color: "var(--color-node-document)" },
-                { key: "infra" as const, label: t.nodeTypeLabels.infra, color: "var(--color-node-service)" },
-                { key: "data" as const, label: t.nodeTypeLabels.data, color: "var(--color-node-table)" },
-                { key: "domain" as const, label: t.nodeTypeLabels.domain, color: "var(--color-node-concept)" },
-                { key: "knowledge" as const, label: t.nodeTypeLabels.knowledge, color: "var(--color-node-article)" },
-              ]).map((cat) => (
-                <button
-                  key={cat.key}
-                  onClick={() => toggleNodeTypeFilter(cat.key)}
-                  className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded border transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-                    nodeTypeFilters[cat.key] !== false
-                      ? "border-border-medium bg-elevated text-text-secondary hover:text-text-primary"
-                      : "border-transparent bg-transparent text-text-muted/40 line-through hover:text-text-muted"
-                  }`}
-                  title={`${nodeTypeFilters[cat.key] !== false ? "Hide" : "Show"} ${cat.label} nodes`}
-                >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{
-                      backgroundColor: cat.color,
-                      opacity: nodeTypeFilters[cat.key] !== false ? 1 : 0.3,
-                    }}
-                  />
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-            <LayerLegend />
-          </div>
-        </div>
+        <div className="flex-1" />
 
         {/* Right — fixed actions */}
-        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-          <FilterPanel />
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0 ml-auto">
           <ExportMenu />
           <button
             onClick={togglePathFinder}
-            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-sm bg-elevated text-text-secondary hover:text-text-primary transition-colors"
+            className={`${HEADER_BUTTON} bg-elevated text-text-secondary hover:text-text-primary`}
             title={t.pathFinder.title}
           >
             <svg
@@ -705,7 +662,8 @@ function DashboardContent({
           <ThemePicker />
           <button
             onClick={() => setShowKeyboardHelp(true)}
-            className="text-text-muted hover:text-accent transition-colors"
+            aria-label={t.keyboardShortcuts.showHelp}
+            className={`${HEADER_ICON_BUTTON} bg-elevated text-text-secondary hover:text-accent`}
             title={t.keyboardShortcuts.showHelp}
           >
             <svg
@@ -723,10 +681,49 @@ function DashboardContent({
             </svg>
           </button>
         </div>
+
+        {/* Row 2, Obsidian only: the map's filters, all the same size on one line */}
+        {graphStyle === "obsidian" && mapFilters && (
+          <div className="basis-full flex flex-wrap items-center gap-2">
+            <DiffToggle />
+            {(isKnowledgeGraph ? [
+              { key: "knowledge" as const, label: t.nodeTypeLabels.all, color: "var(--color-node-article)" },
+            ] : [
+              { key: "code" as const, label: t.nodeTypeLabels.code, color: "var(--color-node-file)" },
+              { key: "config" as const, label: t.nodeTypeLabels.config, color: "var(--color-node-config)" },
+              { key: "docs" as const, label: t.nodeTypeLabels.docs, color: "var(--color-node-document)" },
+              { key: "infra" as const, label: t.nodeTypeLabels.infra, color: "var(--color-node-service)" },
+              { key: "data" as const, label: t.nodeTypeLabels.data, color: "var(--color-node-table)" },
+              { key: "domain" as const, label: t.nodeTypeLabels.domain, color: "var(--color-node-concept)" },
+              { key: "knowledge" as const, label: t.nodeTypeLabels.knowledge, color: "var(--color-node-article)" },
+            ]).map((cat) => (
+              <button
+                key={cat.key}
+                onClick={() => toggleNodeTypeFilter(cat.key)}
+                className={`h-9 inline-flex items-center gap-2 px-3 rounded-lg border text-[13px] font-medium whitespace-nowrap transition-colors ${FOCUS_RING} ${
+                  nodeTypeFilters[cat.key] !== false
+                    ? "border-border-medium bg-elevated text-text-secondary hover:text-text-primary"
+                    : "border-transparent bg-transparent text-text-muted/50 line-through hover:text-text-muted"
+                }`}
+                title={`${nodeTypeFilters[cat.key] !== false ? "Hide" : "Show"} ${cat.label} nodes`}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{
+                    backgroundColor: cat.color,
+                    opacity: nodeTypeFilters[cat.key] !== false ? 1 : 0.3,
+                  }}
+                />
+                {cat.label}
+              </button>
+            ))}
+            <FilterPanel />
+          </div>
+        )}
       </header>
 
-      {/* Search */}
-      <SearchBar />
+      {/* Search (graphify's page has its own; the Learn roadmap is the navigation there) */}
+      {graphStyle === "obsidian" && <SearchBar />}
 
       {/* Graph freshness warning banner */}
       {!loadError && <StalenessBanner freshness={graphFreshness} />}
@@ -745,16 +742,37 @@ function DashboardContent({
 
       {/* Main content: Graph + Sidebar */}
       <div className="flex-1 flex min-h-0 relative">
+        {codeViewerOpen && !codeViewerExpanded && dock === "left" && (
+          <aside className="w-[min(480px,45%)] shrink-0 bg-surface border-r border-border-subtle overflow-hidden">
+            <Suspense fallback={null}>
+              <CodeViewer accessToken={accessToken} onExpand={expandCodeViewer} dock={codeDock} onDock={dockCodeViewer} />
+            </Suspense>
+          </aside>
+        )}
+
         {/* Graph area */}
         <div className="flex-1 min-w-0 min-h-0 relative">
-          {obsidianActive ? (
-            <ObsidianGraphView />
-          ) : viewMode === "knowledge" ? (
-            <KnowledgeGraphView />
-          ) : viewMode === "domain" && domainGraph ? (
-            <DomainGraphView />
-          ) : (
-            <GraphView />
+          {/* pages stay mounted once opened, so coming back keeps their place (no reload) */}
+          {visitedPages.has("learn") && (
+            // a bottom-docked code viewer takes the lower 40%: end the reader above it (Back / Next stay reachable)
+            <div
+              className={`absolute inset-x-0 top-0 ${graphStyle === "learn" ? "" : "hidden"} ${
+                codeViewerOpen && !codeViewerExpanded && dock === "bottom" ? "bottom-[40vh]" : "bottom-0"
+              }`}
+            >
+              <LearnMode />
+            </div>
+          )}
+          {visitedPages.has("graphify") && (
+            <div className={`absolute inset-0 ${graphStyle === "graphify" ? "" : "hidden"}`}>
+              <GraphifyFrame accessToken={accessToken} />
+            </div>
+          )}
+          {domainActive && <DomainGraphView />}
+          {visitedPages.has("obsidian") && (
+            <div className={`absolute inset-0 ${obsidianActive ? "" : "hidden"}`}>
+              <ObsidianGraphView />
+            </div>
           )}
           {obsidianActive ? (
             <button
@@ -763,36 +781,41 @@ function DashboardContent({
               title={t.obsidian.toggleSidebar}
               aria-label={t.obsidian.toggleSidebar}
               aria-pressed={obsSidebarOpen}
-              className="absolute top-3 right-3 z-20 w-9 h-9 rounded-lg border border-white/10 bg-[#262626]/95 text-[#dadada] shadow-xl hover:bg-[#333]"
+              className="absolute top-3 right-3 z-20 w-9 h-9 rounded-lg border border-border-subtle bg-surface/95 text-text-primary shadow-xl hover:bg-elevated"
             >
               {obsSidebarOpen ? "⇥" : "⇤"}
             </button>
-          ) : (
+          ) : domainActive ? (
             <div className="absolute top-3 right-3 text-sm text-text-muted/60 pointer-events-none select-none">
               {t.common.pressKeyboard}
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Right sidebar — telescopes at narrower widths. In the Obsidian style it can be
             hidden, and on narrow screens it overlays the graph instead of shrinking it. */}
-        {(!obsidianActive || obsSidebarOpen) && (
+        {(domainActive || (obsidianActive && obsSidebarOpen)) && (
           <aside
-            className={
-              obsidianActive && isNarrow
-                ? "absolute top-0 right-0 bottom-0 z-30 w-[min(360px,92%)] bg-surface border-l border-border-subtle overflow-auto shadow-2xl"
-                : "w-[260px] md:w-[300px] lg:w-[360px] shrink-0 bg-surface border-l border-border-subtle overflow-auto"
-            }
+            // always beside the map (an overlay hid the zoom buttons and had no way to close)
+            className="w-[300px] lg:w-[360px] shrink-0 bg-surface border-l border-border-subtle overflow-auto"
           >
             {sidebarContent}
           </aside>
         )}
 
+        {codeViewerOpen && !codeViewerExpanded && dock === "right" && (
+          <aside className="w-[min(480px,45%)] shrink-0 bg-surface border-l border-border-subtle overflow-hidden">
+            <Suspense fallback={null}>
+              <CodeViewer accessToken={accessToken} onExpand={expandCodeViewer} dock={codeDock} onDock={dockCodeViewer} />
+            </Suspense>
+          </aside>
+        )}
+
         {/* Code viewer slide-up overlay (collapsed state) */}
-        {codeViewerOpen && !codeViewerExpanded && (
+        {codeViewerOpen && !codeViewerExpanded && dock === "bottom" && (
           <div className="absolute bottom-0 left-0 right-0 h-[40vh] bg-surface border-t border-border-subtle animate-slide-up z-20 overflow-hidden">
             <Suspense fallback={null}>
-              <CodeViewer accessToken={accessToken} onExpand={expandCodeViewer} />
+              <CodeViewer accessToken={accessToken} onExpand={expandCodeViewer} dock={codeDock} onDock={dockCodeViewer} />
             </Suspense>
           </div>
         )}
@@ -805,6 +828,8 @@ function DashboardContent({
           onMouseDown={collapseCodeViewer}
         >
           <div
+            role="dialog"
+            aria-modal="true"
             className="w-[calc(100vw-32px)] max-w-[1120px] h-[calc(100vh-32px)] sm:h-[calc(100vh-48px)] max-h-[820px] rounded-lg border border-border-medium bg-surface shadow-2xl overflow-hidden"
             onMouseDown={(event) => event.stopPropagation()}
           >

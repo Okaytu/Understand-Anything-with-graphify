@@ -25,27 +25,30 @@ import {
 } from "d3-force";
 import { useDashboardStore } from "../store";
 import { useI18n } from "../contexts/I18nContext";
+import { useTheme } from "../themes/index.ts";
 import {
   buildObsidianGraph,
   connectionsOf,
   fileConnectionsOf,
   isFileNode,
   type Connection,
-  edgeLabel,
   groupColor,
   hasSymbols,
   nodeRadius,
+  NODE_CATEGORY,
   type ObsNode,
 } from "../utils/obsidian-graph";
+import { filterEdges, filterNodes } from "../utils/filters";
+import { firstSentence } from "../utils/learn";
 
 type SimNode = ObsNode & SimulationNodeDatum & { r: number };
 type SimLink = SimulationLinkDatum<SimNode> & { types: string[] };
 
-const BG = "#1e1e1e";
-const LINK = "rgba(160,160,160,0.28)";
-const LINK_DIM = "rgba(160,160,160,0.06)";
-const LINK_HI = "#a882ff";
-const LABEL = "#dadada";
+// The canvas follows the theme's Night / Day mode (Obsidian's own graph look, both ways).
+const CANVAS = {
+  dark: { bg: "#1e1e1e", link: "rgba(160,160,160,0.28)", linkDim: "rgba(160,160,160,0.06)", hi: "#a882ff", label: "#dadada", ring: "#ffffff", plain: "#b3b3b3" },
+  light: { bg: "#f6f6f4", link: "rgba(70,70,70,0.30)", linkDim: "rgba(70,70,70,0.07)", hi: "#7c4ddf", label: "#262626", ring: "#111111", plain: "#8c8c8c" },
+} as const;
 const BOX_ITEMS = 8;
 
 interface View {
@@ -87,7 +90,13 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
 
   const hasGraph = !!graph;
   const canShowSymbols = useMemo(() => (graph ? hasSymbols(graph) : false), [graph]);
+  const persona = useDashboardStore((s) => s.persona);
   const [includeSymbols, setIncludeSymbols] = useState(false);
+  // Deep Dive adds functions and classes; Overview and Learn stay at file level.
+  // The Display toggle still overrides this until the next persona click.
+  useEffect(() => {
+    setIncludeSymbols(persona === "experienced");
+  }, [persona]);
   const [showArrows, setShowArrows] = useState(true);
   const [colorGroups, setColorGroups] = useState(true);
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -98,10 +107,37 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
     () => typeof window === "undefined" || window.innerWidth >= 900,
   );
 
+  // the header's map filters: type chips (Code, Config …) and the Filter panel (types,
+  // complexity, layers, link kinds) decide which dots are drawn
+  const nodeTypeFilters = useDashboardStore((s) => s.nodeTypeFilters);
+  const filters = useDashboardStore((s) => s.filters);
+  const visibleGraph = useMemo(() => {
+    if (!graph) return null;
+    const layerIdsOf = new Map<string, Set<string>>();
+    for (const l of graph.layers) for (const id of l.nodeIds) (layerIdsOf.get(id) ?? layerIdsOf.set(id, new Set()).get(id)!).add(l.id);
+    const byType = graph.nodes.filter((n) => nodeTypeFilters[NODE_CATEGORY[n.type] ?? "code"] !== false);
+    const nodes = filterNodes(byType, layerIdsOf, filters);
+    const edges = filterEdges(graph.edges, new Set(nodes.map((n) => n.id)), filters);
+    // nothing filtered out: keep the same graph so the layout does not restart
+    if (nodes.length === graph.nodes.length && edges.length === graph.edges.length) return graph;
+    return { ...graph, nodes, edges };
+  }, [graph, nodeTypeFilters, filters]);
   const obs = useMemo(
-    () => (graph ? buildObsidianGraph(graph, { includeSymbols: includeSymbols && canShowSymbols }) : null),
-    [graph, includeSymbols, canShowSymbols],
+    () => (visibleGraph ? buildObsidianGraph(visibleGraph, { includeSymbols: includeSymbols && canShowSymbols }) : null),
+    [visibleGraph, includeSymbols, canShowSymbols],
   );
+  // Diff: light up what changed since the last commit (like a search does)
+  const diffMode = useDashboardStore((s) => s.diffMode);
+  const changedNodeIds = useDashboardStore((s) => s.changedNodeIds);
+  const diffSet = useMemo(() => {
+    if (!obs || !diffMode || changedNodeIds.size === 0) return null;
+    const s = new Set<string>();
+    for (const id of changedNodeIds) {
+      const v = obs.visibleIdOf.get(id);
+      if (v) s.add(v);
+    }
+    return s;
+  }, [obs, diffMode, changedNodeIds]);
 
   // Highlight sets (kept in refs too so the draw loop reads the latest without re-subscribing)
   const searchSet = useMemo(() => {
@@ -120,8 +156,10 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
   const selectedVisible = selectedNodeId && obs ? obs.visibleIdOf.get(selectedNodeId) ?? null : null;
   const focusId = hoverId ?? pinnedId ?? selectedVisible;
 
-  const stateRef = useRef({ focusId, selectedVisible, searchSet, tourSet, showArrows, colorGroups, obs });
-  stateRef.current = { focusId, selectedVisible, searchSet, tourSet, showArrows, colorGroups, obs };
+  const { preset } = useTheme();
+  const pal = preset.isDark ? CANVAS.dark : CANVAS.light;
+  const stateRef = useRef({ focusId, selectedVisible, searchSet, tourSet, diffSet, showArrows, colorGroups, obs, pal });
+  stateRef.current = { focusId, selectedVisible, searchSet, tourSet, diffSet, showArrows, colorGroups, obs, pal };
 
   // ---------------------------------------------------------------- drawing
   const draw = useCallback(() => {
@@ -135,7 +173,7 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
     const { x, y, k } = viewRef.current;
     const st = stateRef.current;
     const neighbors = st.focusId ? st.obs?.neighbors.get(st.focusId) : undefined;
-    const filter = st.searchSet ?? st.tourSet;
+    const filter = st.searchSet ?? st.tourSet ?? st.diffSet;
 
     const isLit = (id: string) => {
       if (st.focusId) return id === st.focusId || !!neighbors?.has(id);
@@ -144,13 +182,16 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
     };
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = BG;
+    ctx.fillStyle = st.pal.bg;
     ctx.fillRect(0, 0, w, h);
     ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * x, dpr * y);
 
     // links — batched into one path per style (one stroke for thousands of lines),
     // with only the focused node's links drawn separately on top.
     const viewW = w / k, viewH = h / k, minX = -x / k, minY = -y / k;
+    // zoomed in, dots grow only with the square root of the zoom so they never swallow their labels
+    const dotScale = k > 1 ? 1 / Math.sqrt(k) : 1;
+    const rd = (n: SimNode) => n.r * dotScale;
     const inView = (px: number, py: number, pad: number) =>
       px > minX - pad && px < minX + viewW + pad && py > minY - pad && py < minY + viewH + pad;
     const normal = new Path2D();
@@ -171,15 +212,15 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
       path.lineTo(tg.x, tg.y!);
     }
     ctx.lineWidth = 0.8 / Math.sqrt(k);
-    ctx.strokeStyle = LINK_DIM;
+    ctx.strokeStyle = st.pal.linkDim;
     ctx.stroke(dim);
-    ctx.strokeStyle = LINK;
+    ctx.strokeStyle = st.pal.link;
     ctx.stroke(normal);
     const arrows = new Path2D();
     const addArrow = (s: SimNode, tg: SimNode) => {
       const ang = Math.atan2(tg.y! - s.y!, tg.x! - s.x!);
-      const ax = tg.x! - Math.cos(ang) * (tg.r + 2);
-      const ay = tg.y! - Math.sin(ang) * (tg.r + 2);
+      const ax = tg.x! - Math.cos(ang) * (rd(tg) + 2 / k);
+      const ay = tg.y! - Math.sin(ang) * (rd(tg) + 2 / k);
       const size = 5 / Math.sqrt(k);
       arrows.moveTo(ax, ay);
       arrows.lineTo(ax - Math.cos(ang - 0.45) * size, ay - Math.sin(ang - 0.45) * size);
@@ -194,7 +235,7 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
         if (st.focusId && (s.id === st.focusId || tg.id === st.focusId)) continue;
         if (!st.focusId && isLit(s.id) && isLit(tg.id)) addArrow(s, tg);
       }
-      ctx.fillStyle = LINK;
+      ctx.fillStyle = st.pal.link;
       ctx.fill(arrows);
     }
     if (hi.length) {
@@ -207,8 +248,8 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
         hiPath.lineTo(tg.x!, tg.y!);
         if (st.showArrows) {
           const ang = Math.atan2(tg.y! - s.y!, tg.x! - s.x!);
-          const ax = tg.x! - Math.cos(ang) * (tg.r + 2);
-          const ay = tg.y! - Math.sin(ang) * (tg.r + 2);
+          const ax = tg.x! - Math.cos(ang) * (rd(tg) + 2 / k);
+          const ay = tg.y! - Math.sin(ang) * (rd(tg) + 2 / k);
           const size = 5 / Math.sqrt(k);
           hiArrows.moveTo(ax, ay);
           hiArrows.lineTo(ax - Math.cos(ang - 0.45) * size, ay - Math.sin(ang - 0.45) * size);
@@ -217,9 +258,9 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
         }
       }
       ctx.lineWidth = 1.6 / Math.sqrt(k);
-      ctx.strokeStyle = LINK_HI;
+      ctx.strokeStyle = st.pal.hi;
       ctx.stroke(hiPath);
-      ctx.fillStyle = LINK_HI;
+      ctx.fillStyle = st.pal.hi;
       ctx.fill(hiArrows);
     }
 
@@ -231,14 +272,14 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
       if (n.x == null || !inView(n.x, n.y!, n.r + 2)) continue;
       if (n.id === st.focusId) focusNode = n;
       if (n.id === st.selectedVisible) selectedNode = n;
-      const key = `${isLit(n.id) ? 1 : 0}|${st.colorGroups ? groupColor(n.group) : "#b3b3b3"}`;
+      const key = `${isLit(n.id) ? 1 : 0}|${st.colorGroups ? groupColor(n.group) : st.pal.plain}`;
       let path = buckets.get(key);
       if (!path) {
         path = new Path2D();
         buckets.set(key, path);
       }
-      path.moveTo(n.x + n.r, n.y!);
-      path.arc(n.x, n.y!, n.r, 0, Math.PI * 2);
+      path.moveTo(n.x + rd(n), n.y!);
+      path.arc(n.x, n.y!, rd(n), 0, Math.PI * 2);
     }
     for (const [key, path] of buckets) {
       const [lit, color] = key.split("|");
@@ -248,16 +289,16 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
     }
     ctx.globalAlpha = 1;
     if (focusNode) {
-      ctx.fillStyle = LINK_HI;
+      ctx.fillStyle = st.pal.hi;
       ctx.beginPath();
-      ctx.arc(focusNode.x!, focusNode.y!, focusNode.r, 0, Math.PI * 2);
+      ctx.arc(focusNode.x!, focusNode.y!, rd(focusNode), 0, Math.PI * 2);
       ctx.fill();
     }
     if (selectedNode) {
-      ctx.strokeStyle = "#ffffff";
+      ctx.strokeStyle = st.pal.ring;
       ctx.lineWidth = 1.5 / k;
       ctx.beginPath();
-      ctx.arc(selectedNode.x!, selectedNode.y!, selectedNode.r + 3 / k, 0, Math.PI * 2);
+      ctx.arc(selectedNode.x!, selectedNode.y!, rd(selectedNode) + 3 / k, 0, Math.PI * 2);
       ctx.stroke();
     }
 
@@ -267,15 +308,30 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
     const labelAlpha = (r: number) => Math.max(0, Math.min(1, (r * k - 9) / 5));
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
+    // Labels keep one size on screen at every zoom, so they stay easy to read. They are
+    // placed biggest dot first and a label that would overlap one already drawn is skipped
+    // (zoom in and it appears), so text never piles up into an unreadable heap.
+    const candidates: { n: SimNode; alpha: number; focus: boolean }[] = [];
     for (const n of nodesRef.current) {
       if (n.x == null || !inView(n.x, n.y!, 60)) continue;
       const near = st.focusId ? n.id === st.focusId || !!neighbors?.has(n.id) : false;
       const alpha = st.focusId ? (near ? 1 : 0) : isLit(n.id) ? labelAlpha(n.r) : 0;
-      if (alpha <= 0.02) continue;
+      if (alpha > 0.02) candidates.push({ n, alpha, focus: n.id === st.focusId });
+    }
+    candidates.sort((a, b) => Number(b.focus) - Number(a.focus) || b.n.r - a.n.r);
+    const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+    const gap = 2 / k;
+    ctx.fillStyle = st.pal.label;
+    for (const { n, alpha, focus } of candidates) {
+      const size = (focus ? 15 : 13) / k;
+      ctx.font = `${size}px ui-sans-serif, system-ui, sans-serif`;
+      const half = ctx.measureText(n.name).width / 2;
+      const top = n.y! + rd(n) + 4 / k;
+      const box = { x0: n.x! - half - gap, y0: top - gap, x1: n.x! + half + gap, y1: top + size * 1.2 + gap };
+      if (!focus && placed.some((p) => box.x0 < p.x1 && box.x1 > p.x0 && box.y0 < p.y1 && box.y1 > p.y0)) continue;
+      placed.push(box);
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = LABEL;
-      ctx.font = `${(n.id === st.focusId ? 13 : 11) / Math.sqrt(k)}px ui-sans-serif, system-ui, sans-serif`;
-      ctx.fillText(n.name, n.x, n.y! + n.r + 3 / k);
+      ctx.fillText(n.name, n.x!, top);
     }
     ctx.globalAlpha = 1;
   }, []);
@@ -283,6 +339,11 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
   const requestDraw = useCallback(() => {
     if (frameRef.current == null) frameRef.current = requestAnimationFrame(draw);
   }, [draw]);
+
+  // repaint when the theme switches between Night and Day
+  useEffect(() => {
+    requestDraw();
+  }, [pal, requestDraw]);
 
   // ---------------------------------------------------------------- simulation
   useEffect(() => {
@@ -313,7 +374,7 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
   }, [obs, requestDraw]);
 
   // redraw on highlight changes
-  useEffect(requestDraw, [focusId, selectedVisible, searchSet, tourSet, showArrows, colorGroups, requestDraw]);
+  useEffect(requestDraw, [focusId, selectedVisible, searchSet, tourSet, diffSet, showArrows, colorGroups, requestDraw]);
 
   // ---------------------------------------------------------------- sizing
   useEffect(() => {
@@ -405,12 +466,13 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
   const hitTest = (sx: number, sy: number): SimNode | null => {
     const p = toWorld(sx, sy);
     const k = viewRef.current.k;
+    const dotScale = k > 1 ? 1 / Math.sqrt(k) : 1;
     let best: SimNode | null = null;
     let bestD = Infinity;
     for (const n of nodesRef.current) {
       if (n.x == null) continue;
       const d = Math.hypot(n.x - p.x, n.y! - p.y);
-      if (d < n.r + 4 / k && d < bestD) {
+      if (d < n.r * dotScale + 6 / k && d < bestD) {
         best = n;
         bestD = d;
       }
@@ -525,7 +587,7 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
 
   if (!graph || !obs) {
     return (
-      <div className="h-full w-full flex items-center justify-center text-text-muted" style={{ background: BG }}>
+      <div className="h-full w-full flex items-center justify-center text-text-muted" style={{ background: pal.bg }}>
         {t.common.noGraphLoaded}
       </div>
     );
@@ -534,7 +596,7 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
   const legend = graph.layers.map((l, i) => ({ name: l.name, color: groupColor(i) }));
 
   return (
-    <div ref={wrapRef} className="h-full w-full relative overflow-hidden select-none" style={{ background: BG }}>
+    <div ref={wrapRef} data-ua-map className="h-full w-full relative overflow-hidden select-none" style={{ background: pal.bg }}>
       <canvas
         ref={canvasRef}
         className="block touch-none"
@@ -555,20 +617,20 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
           onClick={() => setSettingsOpen(true)}
           title={o.settings}
           aria-label={o.settings}
-          className="absolute top-3 left-3 w-9 h-9 rounded-lg border border-white/10 bg-[#262626]/95 text-[#dadada] text-base shadow-xl hover:bg-[#333]"
+          className="absolute top-3 left-3 w-9 h-9 rounded-lg border border-border-subtle bg-surface/95 text-text-primary text-base shadow-xl hover:bg-elevated"
         >
           ⚙
         </button>
       )}
       {settingsOpen && (
-      <div className="absolute top-3 left-3 w-52 max-w-[calc(100%-24px)] rounded-lg border border-white/10 bg-[#262626]/95 p-3 text-xs text-[#dadada] shadow-xl space-y-2">
+      <div className="absolute top-3 left-3 w-60 max-w-[calc(100%-24px)] rounded-lg border border-border-subtle bg-surface/95 p-3 text-xs text-text-primary shadow-xl space-y-2">
         <div className="flex items-center justify-between">
-          <div className="font-semibold text-[11px] uppercase tracking-wider text-[#999]">{o.display}</div>
+          <div className="font-semibold text-sm text-text-secondary">{o.display}</div>
           <button
             type="button"
             onClick={() => setSettingsOpen(false)}
             aria-label={o.close}
-            className="text-[#999] hover:text-white"
+            className="w-8 h-8 -mr-1 inline-flex items-center justify-center rounded-md text-base text-text-secondary hover:text-text-primary hover:bg-elevated"
           >
             ×
           </button>
@@ -581,20 +643,20 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
         <button
           type="button"
           onClick={fit}
-          className="w-full mt-1 rounded-md bg-white/5 hover:bg-white/10 px-2 py-1 text-[#dadada]"
+          className="w-full mt-1 h-9 rounded-lg bg-elevated hover:bg-root px-2 text-sm text-text-primary"
         >
           {o.fit}
         </button>
-        <div className="text-[10px] text-[#888] pt-1">
+        <div className="text-xs text-text-secondary pt-1">
           {obs.nodes.length} {o.dots} · {obs.links.length} {o.lines}
         </div>
         {colorGroups && legend.length > 0 && (
-          <div className="pt-2 border-t border-white/10 space-y-1 max-h-48 overflow-auto">
-            <div className="font-semibold text-[11px] uppercase tracking-wider text-[#999]">{o.groups}</div>
+          <div className="pt-2 border-t border-border-subtle space-y-1 max-h-48 overflow-auto">
+            <div className="font-semibold text-sm text-text-secondary">{o.groups}</div>
             {legend.map((g) => (
-              <div key={g.name} className="flex items-center gap-2 truncate">
-                <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: g.color }} />
-                <span className="truncate">{g.name}</span>
+              <div key={g.name} className="flex items-start gap-2">
+                <span className="mt-1 inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: g.color }} />
+                <span className="break-words">{g.name}</span>
               </div>
             ))}
           </div>
@@ -603,27 +665,28 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
       )}
 
       {/* zoom controls (there is no pinch-zoom on touch screens yet) */}
-      <div className="absolute bottom-3 right-3 flex flex-col overflow-hidden rounded-lg border border-white/10 bg-[#262626]/95 text-[#dadada] shadow-xl">
-        <button type="button" onClick={() => zoomBy(1.3)} aria-label={o.zoomIn} className="w-9 h-9 hover:bg-[#333] text-lg">
+      <div className="absolute bottom-3 right-3 flex flex-col overflow-hidden rounded-lg border border-border-subtle bg-surface/95 text-text-primary shadow-xl">
+        <button type="button" onClick={() => zoomBy(1.3)} aria-label={o.zoomIn} className="w-9 h-9 hover:bg-elevated text-lg">
           +
         </button>
-        <button type="button" onClick={() => zoomBy(1 / 1.3)} aria-label={o.zoomOut} className="w-9 h-9 hover:bg-[#333] text-lg border-t border-white/10">
+        <button type="button" onClick={() => zoomBy(1 / 1.3)} aria-label={o.zoomOut} className="w-9 h-9 hover:bg-elevated text-lg border-t border-border-subtle">
           −
         </button>
-        <button type="button" onClick={fit} aria-label={o.fit} title={o.fit} className="w-9 h-9 hover:bg-[#333] border-t border-white/10">
+        <button type="button" onClick={fit} aria-label={o.fit} title={o.fit} className="w-9 h-9 hover:bg-elevated border-t border-border-subtle">
           ⤢
         </button>
       </div>
 
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-[11px] text-[#888] pointer-events-none hidden md:block">
+      <div className={`absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-surface/90 px-3 py-1 text-[13px] text-text-secondary pointer-events-none ${selectedVisible ? "hidden" : "hidden md:block"}`}>
         {o.hint}
       </div>
 
       {/* "Where it connects" box */}
-      {boxNode && boxConnections && boxPos && (
+      {/* on desktop the side panel already shows a clicked dot: the box is for hovering */}
+      {boxNode && boxConnections && boxPos && (hoverId || onOpenNote) && (
         <div
-          className={`absolute z-10 w-72 max-w-[calc(100%-24px)] max-h-[60%] overflow-auto rounded-lg border bg-[#262626]/97 p-3 text-xs text-[#dadada] shadow-2xl ${
-            pinned ? "border-[#a882ff]/60 pointer-events-auto" : "border-white/10 pointer-events-none"
+          className={`absolute z-10 w-72 max-w-[calc(100%-24px)] max-h-[60%] overflow-auto rounded-lg border bg-surface/95 p-3 text-xs text-text-primary shadow-2xl ${
+            pinned ? "border-[#a882ff]/60 pointer-events-auto" : "border-border-subtle pointer-events-none"
           }`}
           style={{
             left: Math.max(12, Math.min(boxPos.x, sizeRef.current.w - 300)),
@@ -631,7 +694,7 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
           }}
         >
           <div className="flex items-start justify-between gap-2">
-            <div className="font-semibold text-sm text-white break-words">{boxNode.name}</div>
+            <div className="font-semibold text-sm text-text-primary break-words">{boxNode.name}</div>
             {pinned && (
               <button
                 type="button"
@@ -639,24 +702,25 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
                   setPinnedId(null);
                   selectNode(null);
                 }}
-                className="text-[#999] hover:text-white"
+                className="text-text-secondary hover:text-text-primary"
                 aria-label={o.close}
               >
                 ×
               </button>
             )}
           </div>
-          <div className="text-[10px] uppercase tracking-wider text-[#999] mt-0.5">
+          <div className="text-xs text-text-secondary mt-0.5">
             {boxNode.type}
             {layerName(boxGroup) ? ` · ${layerName(boxGroup)}` : ""}
           </div>
           {boxNode.filePath && boxNode.type !== "article" && (
-            <div className="text-[10px] font-mono text-[#888] mt-0.5 break-all">{boxNode.filePath}</div>
+            <div className="text-[10px] font-mono text-text-muted mt-0.5 break-all">{boxNode.filePath}</div>
           )}
-          <div className="mt-1 text-[#bbb]">
-            {boxConnections.outgoing.length} {o.links.toLowerCase()} · {boxConnections.incoming.length}{" "}
-            {o.backlinks.toLowerCase()}
-          </div>
+          {boxNode.summary && (
+            <div className="mt-1.5 text-[11px] leading-snug text-text-secondary line-clamp-2">
+              {firstSentence(boxNode.summary)}
+            </div>
+          )}
           <ConnList
             title={o.linksTo}
             arrow="→"
@@ -677,12 +741,12 @@ export default function ObsidianGraphView({ onOpenNote }: Props = {}) {
             <button
               type="button"
               onClick={onOpenNote}
-              className="mt-3 w-full rounded-md bg-[#a882ff]/20 py-1.5 text-[#d6c4ff] hover:bg-[#a882ff]/30"
+              className="mt-3 w-full rounded-md bg-[#a882ff]/20 py-1.5 text-text-primary hover:bg-[#a882ff]/30"
             >
               {o.openNote} →
             </button>
           )}
-          {!pinned && <div className="mt-2 text-[10px] text-[#888]">{o.clickToPin}</div>}
+          {!pinned && <div className="mt-2 text-[10px] text-text-muted">{o.clickToPin}</div>}
         </div>
       )}
     </div>
@@ -698,10 +762,10 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`relative w-8 h-4 rounded-full transition-colors ${checked ? "bg-[#a882ff]" : "bg-white/15"}`}
+        className={`relative w-10 h-6 shrink-0 rounded-full transition-colors ${checked ? "bg-[#a882ff]" : "bg-border-medium"}`}
       >
         <span
-          className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${checked ? "left-4" : "left-0.5"}`}
+          className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${checked ? "left-[18px]" : "left-0.5"}`}
         />
       </button>
     </label>
@@ -727,7 +791,7 @@ function ConnList({
   const shown = pinned ? items : items.slice(0, BOX_ITEMS);
   return (
     <div className="mt-2">
-      <div className="text-[10px] uppercase tracking-wider text-[#999] mb-1">
+      <div className="text-xs text-text-secondary mb-1">
         {title} ({items.length})
       </div>
       <ul className="space-y-0.5">
@@ -743,24 +807,14 @@ function ConnList({
             >
               <span className="flex items-baseline gap-1.5">
                 <span className="text-[#a882ff]">{arrow}</span>
-                <span className="truncate text-[#e6e6e6]">{c.name}</span>
-                {c.file && <span className="shrink-0 text-[10px] text-[#777]">{c.file}</span>}
-                <span className="ml-auto shrink-0 text-[10px] text-[#888]">{edgeLabel(c.edgeTypes)}</span>
+                <span className="truncate text-text-primary">{c.name}</span>
               </span>
-              {c.why && (
-                <span className={`block pl-4 text-[11px] leading-snug text-[#b9b9b9] ${pinned ? "" : "line-clamp-1"}`}>
-                  {c.why}
-                </span>
-              )}
-              {pinned && c.via && c.via.length > 0 && (
-                <span className="block pl-4 text-[10px] text-[#777] truncate">via {c.via.join(", ")}</span>
-              )}
             </button>
           </li>
         ))}
       </ul>
       {!pinned && items.length > BOX_ITEMS && (
-        <div className="text-[10px] text-[#888] mt-0.5">
+        <div className="text-[10px] text-text-muted mt-0.5">
           +{items.length - BOX_ITEMS} {moreLabel}
         </div>
       )}

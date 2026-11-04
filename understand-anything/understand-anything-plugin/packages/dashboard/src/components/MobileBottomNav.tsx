@@ -53,7 +53,7 @@ export default function MobileBottomNav({ activeTab, onTabChange }: Props) {
             key={id}
             type="button"
             onClick={() => onTabChange(id)}
-            className={`relative flex-1 flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+            className={`relative flex-1 flex flex-col items-center justify-center gap-1 py-2.5 text-xs font-semibold transition-colors ${
               active ? "text-accent" : "text-text-muted hover:text-text-secondary"
             }`}
             aria-current={active ? "page" : undefined}

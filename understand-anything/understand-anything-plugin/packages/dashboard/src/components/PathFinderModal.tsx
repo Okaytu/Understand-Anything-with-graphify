@@ -1,311 +1,337 @@
-import { useEffect, useRef, useState } from "react";
+/**
+ * "How are two parts connected?": pick two parts of the project by typing their names and
+ * see the chain of links between them, with the reason for each link in plain words.
+ */
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import type { GraphEdge, GraphNode } from "@understand-anything/core/types";
 import { useDashboardStore } from "../store";
+import { useI18n } from "../contexts/I18nContext";
+import { firstSentence } from "../utils/learn";
+import { explanationOf } from "../utils/obsidian-graph";
+import { rankMatches, shortestPath } from "../utils/path-finder";
 
 interface PathFinderModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+const MAX_MATCHES = 30;
+
 export default function PathFinderModal({ isOpen, onClose }: PathFinderModalProps) {
   const graph = useDashboardStore((s) => s.graph);
   const selectNode = useDashboardStore((s) => s.selectNode);
-  const [fromNodeId, setFromNodeId] = useState("");
-  const [toNodeId, setToNodeId] = useState("");
-  const [path, setPath] = useState<string[] | null>(null);
-  const [searching, setSearching] = useState(false);
+  const setGraphStyle = useDashboardStore((s) => s.setGraphStyle);
+  const { t } = useI18n();
+  const P = t.pathFinder;
+  const [fromId, setFromId] = useState<string | null>(null);
+  const [toId, setToId] = useState<string | null>(null);
+  // undefined: not asked yet; null: asked, no connection
+  const [path, setPath] = useState<string[] | null | undefined>(undefined);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
+  const byId = useMemo(() => new Map((graph?.nodes ?? []).map((n) => [n.id, n])), [graph]);
+  const edgeByPair = useMemo(() => {
+    const m = new Map<string, GraphEdge>();
+    for (const e of graph?.edges ?? []) m.set(`${e.source}\u0000${e.target}`, e);
+    return m;
+  }, [graph]);
+
   useEffect(() => {
     if (!isOpen) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
-        onClose();
-      }
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
     };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen, onClose]);
-
-  // Close on Escape
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    };
-
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [isOpen, onClose]);
 
   if (!isOpen || !graph) return null;
 
-  const nodes = graph.nodes;
-  const edges = graph.edges;
+  const from = fromId ? byId.get(fromId) ?? null : null;
+  const to = toId ? byId.get(toId) ?? null : null;
+  const same = !!from && !!to && from.id === to.id;
+  const canFind = !!from && !!to && !same;
 
-  // BFS to find shortest path
-  const findPath = () => {
-    if (!fromNodeId || !toNodeId || fromNodeId === toNodeId) {
-      setPath(null);
-      return;
-    }
-
-    setSearching(true);
-
-    // Build adjacency list (bidirectional traversal for path finding)
-    const adjacency = new Map<string, string[]>();
-    for (const edge of edges) {
-      if (!adjacency.has(edge.source)) {
-        adjacency.set(edge.source, []);
-      }
-      adjacency.get(edge.source)!.push(edge.target);
-      // Also traverse in reverse so we can find paths through backward edges
-      if (!adjacency.has(edge.target)) {
-        adjacency.set(edge.target, []);
-      }
-      adjacency.get(edge.target)!.push(edge.source);
-    }
-
-    // BFS
-    const queue: Array<{ nodeId: string; path: string[] }> = [
-      { nodeId: fromNodeId, path: [fromNodeId] },
-    ];
-    const visited = new Set<string>([fromNodeId]);
-
-    while (queue.length > 0) {
-      const { nodeId, path: currentPath } = queue.shift()!;
-
-      if (nodeId === toNodeId) {
-        setPath(currentPath);
-        setSearching(false);
-        return;
-      }
-
-      const neighbors = adjacency.get(nodeId) ?? [];
-      for (const neighbor of neighbors) {
-        if (!visited.has(neighbor)) {
-          visited.add(neighbor);
-          queue.push({ nodeId: neighbor, path: [...currentPath, neighbor] });
-        }
-      }
-    }
-
-    // No path found
-    setPath([]);
-    setSearching(false);
+  // a chain through an outside library or a package entry ("both use Next.js") says nothing
+  const passThrough = (id: string) => {
+    const n = byId.get(id);
+    return !!n && !id.startsWith("ref_") && n.type !== "concept" && n.type !== "module";
   };
 
-  const handleNodeClick = (nodeId: string) => {
-    selectNode(nodeId);
+  const link = (a: string, b: string) => {
+    const labels = t.edgeLabels as Partial<Record<string, { forward: string; backward: string }>>;
+    const forward = edgeByPair.get(`${a}\u0000${b}`);
+    const edge = forward ?? edgeByPair.get(`${b}\u0000${a}`);
+    if (!edge) return null;
+    const words = labels[edge.type];
+    const label = words ? (forward ? words.forward : words.backward) : edge.type.replace(/_/g, " ");
+    // the converter's own "graphify: calls · EXTRACTED" notes are not reasons; only real ones show
+    return { label, why: explanationOf(edge) };
+  };
+
+  const show = (id: string) => {
+    const st = useDashboardStore.getState();
+    if (st.viewMode === "domain") st.setViewMode(st.isKnowledgeGraph ? "knowledge" : "structural");
+    selectNode(id);
+    setGraphStyle("obsidian");
     onClose();
   };
 
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-root/80 backdrop-blur-sm">
+    // closes from the backdrop itself: a document-wide "click outside" check would also fire for
+    // a picked match, whose button is already gone by the time that listener runs
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-root/80 backdrop-blur-sm p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div
         ref={modalRef}
-        className="glass-heavy rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden animate-fade-slide-in"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="path-finder-heading"
+        className="glass-heavy rounded-xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden animate-fade-slide-in"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
-          <div className="flex items-center gap-3">
-            <svg className="w-5 h-5 text-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-              />
-            </svg>
-            <h2 className="font-heading text-xl text-text-primary">Dependency Path Finder</h2>
+        <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4 border-b border-border-subtle">
+          <div>
+            <h2 id="path-finder-heading" className="font-heading text-2xl text-text-primary">
+              {P.heading}
+            </h2>
+            <p className="mt-1 text-base leading-relaxed text-text-secondary max-w-prose">{P.intro}</p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-text-muted hover:text-text-primary transition-colors"
+            aria-label={t.obsidian.close}
+            className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-elevated transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(80vh-180px)]">
-          <p className="text-sm text-text-secondary">
-            Find the shortest path between two nodes in the dependency graph.
-          </p>
-
-          {/* From Node */}
-          <div>
-            <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
-              From Node
-            </label>
-            <select
-              value={fromNodeId}
-              onChange={(e) => {
-                setFromNodeId(e.target.value);
-                setPath(null);
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-5 space-y-4">
+          <NodePicker
+            label={P.from}
+            nodes={graph.nodes}
+            value={from}
+            onChange={(id) => {
+              setFromId(id);
+              setPath(undefined);
+            }}
+            autoFocus
+          />
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                setFromId(toId);
+                setToId(fromId);
+                setPath(undefined);
               }}
-              className="w-full bg-elevated text-text-primary text-sm rounded-lg px-3 py-2 border border-border-subtle focus:outline-none focus:border-gold/50"
+              disabled={!from && !to}
+              className="rounded-lg border border-border-medium px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-elevated disabled:opacity-40"
             >
-              <option value="">Select a node...</option>
-              {nodes.map((node) => (
-                <option key={node.id} value={node.id}>
-                  {node.name} ({node.type})
-                </option>
-              ))}
-            </select>
+              ⇅ {P.swap}
+            </button>
           </div>
+          <NodePicker
+            label={P.to}
+            nodes={graph.nodes}
+            value={to}
+            onChange={(id) => {
+              setToId(id);
+              setPath(undefined);
+            }}
+          />
 
-          {/* To Node */}
-          <div>
-            <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
-              To Node
-            </label>
-            <select
-              value={toNodeId}
-              onChange={(e) => {
-                setToNodeId(e.target.value);
-                setPath(null);
-              }}
-              className="w-full bg-elevated text-text-primary text-sm rounded-lg px-3 py-2 border border-border-subtle focus:outline-none focus:border-gold/50"
-            >
-              <option value="">Select a node...</option>
-              {nodes.map((node) => (
-                <option key={node.id} value={node.id}>
-                  {node.name} ({node.type})
-                </option>
-              ))}
-            </select>
-          </div>
+          {same && <p className="text-sm text-amber-300">{P.same}</p>}
 
-          {/* Find Path Button */}
           <button
-            onClick={findPath}
-            disabled={!fromNodeId || !toNodeId || fromNodeId === toNodeId || searching}
-            className="w-full bg-gold/10 border border-gold/30 text-gold text-sm font-medium py-2.5 px-4 rounded-lg hover:bg-gold/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            type="button"
+            onClick={() => setPath(shortestPath(graph.edges, from!.id, to!.id, passThrough))}
+            disabled={!canFind}
+            className="w-full h-12 rounded-xl bg-accent text-root text-base font-semibold hover:opacity-90 transition-opacity disabled:bg-elevated disabled:text-text-muted"
           >
-            {searching ? "Searching..." : "Find Path"}
+            {P.find}
           </button>
 
-          {/* Path Result */}
-          {path !== null && (
-            <div className="mt-4">
-              {path.length === 0 ? (
-                <div className="bg-red-900/20 border border-red-700/50 rounded-lg p-4 text-center">
-                  <svg
-                    className="w-8 h-8 text-red-400 mx-auto mb-2"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <p className="text-sm text-red-200">No path found between these nodes.</p>
-                </div>
-              ) : (
-                <div className="bg-elevated border border-border-subtle rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <svg
-                      className="w-4 h-4 text-green-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    <h3 className="text-sm font-semibold text-text-primary">
-                      Path Found ({path.length} nodes)
-                    </h3>
-                  </div>
-                  <div className="space-y-2">
-                    {path.map((nodeId, idx) => {
-                      const node = nodeMap.get(nodeId);
-                      if (!node) return null;
+          {path === null && (
+            <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-base text-rose-200">{P.noPath}</p>
+          )}
 
-                      const isLast = idx === path.length - 1;
-
-                      return (
-                        <div key={nodeId}>
-                          <button
-                            onClick={() => handleNodeClick(nodeId)}
-                            className="w-full flex items-center gap-3 p-2 bg-surface rounded-lg hover:bg-elevated transition-colors text-left"
-                          >
-                            <div className="w-6 h-6 shrink-0 rounded-full bg-gold/20 flex items-center justify-center text-xs font-bold text-gold">
-                              {idx + 1}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm text-text-primary truncate">{node.name}</div>
-                              <div className="text-xs text-text-muted capitalize">{node.type}</div>
-                            </div>
-                            <svg
-                              className="w-4 h-4 text-text-muted"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                              />
-                            </svg>
-                          </button>
-                          {!isLast && (
-                            <div className="flex items-center justify-center my-1">
-                              <svg
-                                className="w-4 h-4 text-gold"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M19 14l-7 7m0 0l-7-7m7 7V3"
-                                />
-                              </svg>
-                            </div>
-                          )}
+          {path && path.length > 1 && (
+            <section aria-live="polite" className="pt-2">
+              <h3 className="text-lg font-semibold text-text-primary">
+                {path.length === 2 ? P.foundOne : P.foundMany.replace("{n}", String(path.length - 1))}
+              </h3>
+              <ol className="mt-3">
+                {path.map((id, idx) => {
+                  const n = byId.get(id);
+                  if (!n) return null;
+                  const next = path[idx + 1];
+                  const step = next ? link(id, next) : null;
+                  return (
+                    <li key={id}>
+                      <div className="flex items-start gap-3">
+                        <span className="shrink-0 mt-0.5 w-8 h-8 rounded-full bg-accent/20 text-accent text-sm font-semibold flex items-center justify-center">
+                          {idx + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-base font-semibold text-text-primary break-words">{n.name}</div>
+                          {n.filePath && <div className="font-mono text-xs text-text-muted break-all">{n.filePath}</div>}
+                          {n.summary && <p className="mt-1 text-sm leading-relaxed text-text-secondary">{firstSentence(n.summary)}</p>}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
+                        <button
+                          type="button"
+                          onClick={() => show(id)}
+                          className="shrink-0 rounded-lg border border-border-medium px-3 py-2 text-sm text-text-primary hover:bg-elevated"
+                        >
+                          {t.learnMode.showOnMap}
+                        </button>
+                      </div>
+                      {step && (
+                        <div className="ml-4 my-1 border-l-2 border-accent/40 pl-7 py-2">
+                          <div className="text-sm font-medium text-accent">{step.label}</div>
+                          {step.why && <p className="text-sm leading-relaxed text-text-secondary">{step.why}</p>}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-border-subtle">
+function NodePicker({
+  label,
+  nodes,
+  value,
+  onChange,
+  autoFocus,
+}: {
+  label: string;
+  nodes: GraphNode[];
+  value: GraphNode | null;
+  onChange: (id: string | null) => void;
+  autoFocus?: boolean;
+}) {
+  const { t } = useI18n();
+  const P = t.pathFinder;
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const matches = useMemo(() => rankMatches(nodes, query, MAX_MATCHES), [nodes, query]);
+  const listId = `picker-${label.replace(/\W+/g, "-")}`;
+
+  const choose = (n: GraphNode) => {
+    onChange(n.id);
+    setQuery("");
+    setOpen(false);
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setOpen(true);
+      setActive((i) => Math.min(i + 1, Math.max(matches.length - 1, 0)));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter" && matches[active]) {
+      e.preventDefault();
+      choose(matches[active]);
+    } else if (e.key === "Escape" && open && query) {
+      // close the list first; a second Escape closes the dialog
+      e.nativeEvent.stopImmediatePropagation();
+      setOpen(false);
+    }
+  };
+
+  if (value) {
+    return (
+      <div>
+        <div className="mb-1.5 text-sm font-medium text-text-secondary">{label}</div>
+        <div className="flex items-center gap-3 rounded-xl border border-accent/40 bg-elevated px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-base font-semibold text-text-primary break-words">{value.name}</div>
+            {value.filePath && <div className="font-mono text-xs text-text-muted break-all">{value.filePath}</div>}
+          </div>
           <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
+            type="button"
+            onClick={() => onChange(null)}
+            className="shrink-0 rounded-lg border border-border-medium px-3 py-2 text-sm text-text-primary hover:bg-surface"
           >
-            Close
+            {P.change}
           </button>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <label className="block text-sm font-medium text-text-secondary">
+        {label}
+        <input
+          type="text"
+          value={query}
+          autoFocus={autoFocus}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setActive(0);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          onKeyDown={onKeyDown}
+          placeholder={P.placeholder}
+          role="combobox"
+          aria-expanded={open && !!query.trim()}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          className="mt-1.5 block w-full h-12 rounded-xl border border-border-medium bg-elevated px-4 text-base font-normal text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+        />
+      </label>
+      {open && query.trim() && (
+        <ul
+          id={listId}
+          role="listbox"
+          className="mt-1 max-h-72 overflow-y-auto overscroll-contain rounded-xl border border-border-medium bg-surface shadow-2xl"
+        >
+          {matches.length === 0 ? (
+            <li className="px-4 py-3 text-sm text-text-muted">{P.noMatches}</li>
+          ) : (
+            matches.map((n, i) => (
+              <li key={n.id} role="option" aria-selected={i === active}>
+                <button
+                  type="button"
+                  // mousedown, not click: the pick must land before the input's blur closes the list
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    choose(n);
+                  }}
+                  onMouseEnter={() => setActive(i)}
+                  className={`w-full text-left px-4 py-2.5 ${i === active ? "bg-elevated" : ""}`}
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-base text-text-primary break-words">{n.name}</span>
+                    <span className="shrink-0 text-xs text-text-muted">{n.type}</span>
+                  </div>
+                  {n.filePath && <div className="font-mono text-xs text-text-muted break-all">{n.filePath}</div>}
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
     </div>
   );
 }
