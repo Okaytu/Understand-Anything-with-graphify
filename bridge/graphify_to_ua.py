@@ -386,8 +386,9 @@ def convert(
             "id": f"layer:graphify-community-{cid}",
             "name": name,
             "description": (
-                f"graphify community {cid} ({_plural(files, 'file')}, {_plural(len(ids), 'top-level node')}). "
-                f"Most connected: {hub_text}."
+                (f"A group of {files} files that work closely together ({_plural(len(ids), 'piece')} in all)."
+                 if files > 1 else f"One file and the pieces inside it ({_plural(len(ids), 'piece')} in all).")
+                + (f" The busiest: {hub_text}." if hubs else "")
             ),
             "nodeIds": sorted(ids),
         })
@@ -395,7 +396,7 @@ def convert(
         layers.append({
             "id": "layer:graphify-other",
             "name": "Other",
-            "description": "Small or unclustered graphify communities and external dependencies.",
+            "description": "Small groups and outside libraries that did not fit a bigger group.",
             "nodeIds": sorted(other),
         })
 
@@ -448,42 +449,53 @@ def _summary(
     in_c: Counter[str],
     community: str | None,
 ) -> str:
-    """Deterministic one-paragraph summary (graphify has no LLM summaries for code)."""
+    """Plain-language placeholder until an agent writes the real explanation (bridge/enrich.py):
+    what it is, where it lives and how much it touches, without jargon. Readers are often
+    not programmers. (`community` is kept for callers; group names are jargon here.)"""
     kind = {
-        "file": "File", "config": "Config file", "document": "Document",
-        "class": "Class" if node.get("_callable_class") else "Type",
-        "function": "Function", "module": "External module", "concept": "Symbol",
-        "resource": "Resource",
-    }.get(ntype, ntype.capitalize())
+        "file": "a file of code", "config": "a settings file", "document": "a document",
+        # graphify flags TypeScript type aliases like classes, so say what is true of both
+        "class": "a type or class (a description of a kind of thing the code works with)",
+        "function": "a function (a small named routine)", "module": "an outside library the project uses",
+        "concept": "a named piece of code", "resource": "an image or other file the project uses, kept",
+    }.get(ntype, f"a {ntype}")
+    if ntype == "document" and node.get("source_file") and name != PurePosixPath(node["source_file"]).name:
+        kind = "a section of a document"   # a heading inside README.md, not the file itself
     if node.get("file_type") == "rationale":
         return f"Developer note in {node.get('source_file', 'the source')}: {name}"
+    if ntype == "concept":
+        src = node.get("source_file") or ""
+        if str(node.get("id", "")).startswith("ref_"):
+            return f"{name} is an outside library the project uses (listed in {src or 'its settings'})."
+        if src and PurePosixPath(src).suffix.lower() in {".json", ".toml", ".yaml", ".yml", ".ini", ".cfg", ".md", ".mdx", ".rst", ".txt"}:
+            return f"{name} is a setting or name listed in {src}."
     where = ""
     if node.get("source_file") and not _is_external(node) and name != node["source_file"]:
         where = f" in {node['source_file']}"
         loc = parse_line_range(node.get("source_location"))
         if loc and ntype not in {"file", "config", "document"}:
-            where += f" (line {loc[0]})"
-    parts = [f"{kind} {name}{where}."]
+            where += f", line {loc[0]}"
+    parts = [f"{name} is {kind}{where}."]
     facts = []
     if out_c.get("calls"):
-        facts.append(f"calls {_plural(out_c['calls'], 'symbol')}")
-    if in_c.get("calls"):
-        facts.append(f"called from {_plural(in_c['calls'], 'place')}")
+        facts.append(f"runs {_plural(out_c['calls'], 'other function')}")
     imports_out = out_c.get("imports", 0) + out_c.get("imports_from", 0)
     if imports_out:
-        facts.append(f"imports {imports_out}")
-    imports_in = in_c.get("imports", 0) + in_c.get("imports_from", 0)
-    if imports_in:
-        facts.append(f"imported by {imports_in}")
+        facts.append(f"uses {imports_out} other {'file or library' if imports_out == 1 else 'files or libraries'}")
     defines = out_c.get("contains", 0) + out_c.get("method", 0)
     if defines:
-        facts.append(f"defines {defines}")
+        facts.append(f"contains {_plural(defines, 'smaller piece')}")
+    if in_c.get("calls"):
+        facts.append(f"is run from {_plural(in_c['calls'], 'place')}")
+    imports_in = in_c.get("imports", 0) + in_c.get("imports_from", 0)
+    if imports_in:
+        facts.append(f"is used by {_plural(imports_in, 'file' if ntype == 'module' else 'other file')}")
     if in_c.get("references"):
-        facts.append(f"referenced by {in_c['references']}")
+        facts.append(f"is mentioned in {_plural(in_c['references'], 'place')}")
     if facts:
-        parts.append("Connections: " + "; ".join(facts) + ".")
-    if community:
-        parts.append(f"graphify community: {community}.")
+        parts.append("It " + (", ".join(facts[:-1]) + " and " + facts[-1] if len(facts) > 1 else facts[0]) + ".")
+    if ntype in {"file", "config", "document"}:
+        parts.append("It has not been explained in plain words yet.")
     return " ".join(parts)
 
 
@@ -499,13 +511,17 @@ def _build_tour(
 ) -> list[dict[str, Any]]:
     tour: list[dict[str, Any]] = []
     if god_nodes:
-        names = ", ".join(display_name(by_id[n]) for n in god_nodes[:TOUR_NODES_PER_STEP])
+        top = god_nodes[:TOUR_NODES_PER_STEP]
+        names = ", ".join(display_name(by_id[n]) for n in top)
         tour.append({
             "order": 1,
-            "title": "Start here: the core abstractions",
+            "title": "Start here: the pieces most of the code relies on",
             "description": (
-                "These are the most connected symbols in the project (graphify's \"god nodes\"). "
-                f"Most other code flows through them: {names}."
+                "These parts are connected to the most other code in the project, so they are "
+                f"the best place to begin. They are {names}."
+                if len(top) > 1 else
+                "This part is connected to the most other code in the project, so it is the "
+                f"best place to begin. It is {names}."
             ),
             "nodeIds": god_nodes[:TOUR_NODES_PER_STEP],
         })
@@ -545,11 +561,12 @@ def _build_tour(
         name = community_name.get(cid, f"Community {cid}")
         tour.append({
             "order": len(tour) + 1,
-            "title": f"Subsystem: {name}",
+            "title": f"The part around {name}",
             "description": (
-                f"A cluster graphify detected around {name}. "
-                f"Used by {_plural(incoming[cid], 'dependency edge')} from other subsystems. "
-                + (f"Lives in {file_text}." if file_text else "")
+                f"A group of code that works closely together, centred on {name}. "
+                + (f"Other parts of the project link into it {incoming[cid]} "
+                   f"{'time' if incoming[cid] == 1 else 'times'}. " if incoming[cid] else "")
+                + (f"It lives in {file_text}." if file_text else "")
             ).strip(),
             "nodeIds": top,
         })
@@ -560,8 +577,8 @@ def _build_tour(
             "order": len(tour) + 1,
             "title": "Notes the developers left behind",
             "description": (
-                "graphify turns NOTE / WHY / TODO comments into nodes. "
-                "They explain intent that the code alone does not."
+                "Comments where the developers wrote down why something is the way it is "
+                "(NOTE, WHY or TODO). They explain what the code alone does not."
             ),
             "nodeIds": sorted(notes)[:TOUR_NODES_PER_STEP * 2],
         })

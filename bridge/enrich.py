@@ -419,7 +419,8 @@ Open other files only if needed.
 - description: 3-5 sentences: what the project does, for whom, and its main parts.
 - layers: for EVERY layer id, a short meaningful "name" (2-4 words, e.g. "Payment processing")
   and a one-sentence "description". Base names on what the member files do.
-- tour: 6-12 steps that teach the codebase in a good order (foundations first). Each step:
+- tour: about {tour_steps} steps (roughly one per 10 files, so it grows with the project) that
+  teach the codebase in a good order (foundations first), together covering every layer. Each step:
   "title", "description" (2-4 sentences), and "files": 1-5 file paths (or "path::Symbol" keys
   from key_symbols) the step is about.
 Write valid JSON only."""
@@ -538,7 +539,8 @@ def export(root: Path, args: argparse.Namespace | None = None) -> int:
         readme = next((p for p in sorted(idx.file_ids, key=len) if p.lower().split("/")[-1].startswith("readme")), None)
         write_json(work / "layer-members.json", layer_members)
         write_json(work / "project.json", {
-            "instructions": PROJECT_INSTRUCTIONS,
+            "instructions": PROJECT_INSTRUCTIONS.replace(
+                "{tour_steps}", str(max(6, min(40, round(len(idx.file_ids) / 10))))),
             "project_root": str(root),
             "answer_file": str(work / "answer-project.json"),
             "answer_format": {
@@ -831,6 +833,8 @@ def apply(root: Path) -> int:
     work = data_dir / WORK_DIR
     if work.exists():
         shutil.rmtree(work)
+    if (root / "graphify-out" / "graph.html").is_file():  # refresh the explain panel's texts
+        subprocess.run([sys.executable, "-I", str(Path(__file__).with_name("explain_html.py")), str(root)], check=False)
     print_status(compute_status(root, graph, enr))
     return 0
 

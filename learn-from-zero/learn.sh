@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Start-from-zero learning: turn a wiki of notes into a knowledge graph and open it
-# in both viewers. Re-run after every few notes and watch the graph grow.
+# in the dashboard. Re-run after every few notes and watch the graph grow.
 #
 #   learn-from-zero/learn.sh <wiki-dir> [--view both|ua|graphify|none] [--port N] [--force]
 #
 #   1. learn.py build      -> <wiki>/.ua/knowledge-graph.json  (Understand-Anything's own
 #                             deterministic wiki parser + merger, no LLM)
 #   2. validate            -> the dashboard's own validateGraph()
-#   3. graphify update     -> <wiki>/graphify-out/  (notes, headings and links, no LLM)
-#   4. viewers             -> dashboard on <port>, graphify's graph.html on <port+1>
+#   3. graphify update     -> <wiki>/graphify-out/  (notes, headings and links, no LLM),
+#                             plus the explain panel in its graph.html
+#   4. viewers             -> dashboard on <port> (Learn, Obsidian and Graphify tabs)
 #
 # Create a new wiki first with:  learn-from-zero/learn.py init <dir> "Topic"
 set -euo pipefail
@@ -55,6 +56,8 @@ node "$REPO_ROOT/bridge/validate_ua_graph.mjs" "$DATA_DIR/knowledge-graph.json"
 
 step "3/4 graphify: mapping the notes"
 (cd "$GRAPHIFY_DIR" && uv run --quiet --frozen --project "$GRAPHIFY_DIR" graphify update "$WIKI_DIR")
+python3 -I "$REPO_ROOT/bridge/explain_html.py" "$WIKI_DIR" \
+  || echo "note: could not add the explain panel to graph.html (the rest still works)"
 
 echo
 echo "Outputs:"

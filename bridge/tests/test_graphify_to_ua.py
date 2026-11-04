@@ -106,7 +106,7 @@ def test_node_fields(sample_graph):
     assert "filePath" not in nodes["ref_requests"]
     assert "community:App" in run["tags"]
     assert "confidence:inferred" in nodes["Shape"]["tags"]
-    assert nodes["App"]["summary"].startswith("Class App in src/app.py (line 5).")
+    assert nodes["App"]["summary"].startswith("App is a type or class (a description of a kind of thing the code works with) in src/app.py, line 5.")
     assert nodes["note"]["summary"].startswith("Developer note")
     for n in nodes.values():
         assert n["complexity"] in {"simple", "moderate", "complex"}
@@ -181,7 +181,7 @@ def test_tour(sample_graph):
     graph = bridge.convert(sample_graph, project_name="demo")
     tour = graph["tour"]
     assert [s["order"] for s in tour] == list(range(1, len(tour) + 1))
-    assert tour[0]["title"] == "Start here: the core abstractions"
+    assert tour[0]["title"] == "Start here: the pieces most of the code relies on"
     assert tour[-1]["title"] == "Notes the developers left behind"
     assert "note" in tour[-1]["nodeIds"]
     ids = {n["id"] for n in graph["nodes"]}
@@ -277,3 +277,11 @@ def test_end_to_end_with_real_graphify(tmp_path):
     names = {n["name"]: n["type"] for n in graph["nodes"]}
     assert names.get("Square") == "class"
     assert names.get("main.py") == "file"
+
+
+def test_group_and_tour_text_agree_with_their_counts(sample_graph):
+    graph = bridge.convert(sample_graph, project_name="demo")
+    for layer in graph["layers"]:
+        assert "1 file that work " not in layer["description"]
+    first = graph["tour"][0]["description"]
+    assert ("They are" in first) == ("These parts" in first)

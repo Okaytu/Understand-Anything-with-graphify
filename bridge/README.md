@@ -1,12 +1,17 @@
 # bridge: graphify → Understand-Anything
 
 Map any project with **graphify** (deterministic tree-sitter parsing, no LLM, nothing
-leaves your machine), then explore it in **both** projects' own viewers:
+leaves your machine), then explore it in one dashboard at `http://127.0.0.1:5173/?token=…`
+with three tabs:
 
-| View | What you get | Where |
-|---|---|---|
-| **graphify** | Force-directed graph coloured by community, node search, community filter, `GRAPH_REPORT.md` (god nodes, surprising connections, suggested questions) | `http://127.0.0.1:5174/graph.html` |
-| **Understand-Anything** | Opens as an **Obsidian-style graph**: one dot per file (switch on *Functions & classes* for every symbol), coloured by graphify community; hover for a box of what it imports, calls and is used by; click to open it as a note with Links, Backlinks, what it defines and an *Open code* button. **Classic** in the header switches to the layered dashboard (layers → files → classes → functions). Code viewer, search and the generated tour work in both. | `http://127.0.0.1:5173/?token=…` |
+| Tab | What you get |
+|---|---|
+| **Learn** (opens first) | The project as a roadmap: the generated tour (or one chapter per group when there is none), read step by step with Back / Next or the arrow keys. Each step explains its files: summary, how hard it is to read, what's inside, how it connects, language notes, *Open code*, *Show on map* and a *Copy AI prompt for this step* button. It remembers where you stopped. |
+| **Obsidian** | One dot per file (*Deep Dive* or *Functions & classes* adds every symbol), coloured by group; hover for what it imports, calls and is used by; click to open it as a note with Links, Backlinks, what it defines and *Open code*. |
+| **Graphify** | graphify's own `graph.html`, with the explain panel `explain_html.py` adds: click a dot for a plain-language explanation, what's inside the file, what uses it and what it relies on (with the reason for each link), **Show impact** (everything that depends on it, with a count) and a ready-to-copy AI prompt (optionally with the code). Plus **Whole project**, **Health check** (risky hubs, circular dependencies, files nothing uses) and an **Ask** box. Served by the dashboard behind its token, because the page embeds source code for its prompts. |
+
+**Path** in the header answers "how are two parts connected?": type two names and it shows
+the chain of links between them, with the reason for each link.
 
 ## One command
 
@@ -23,11 +28,11 @@ updated if it's already there. `graphify-out/` and `.ua/` are added to that clon
 
 | Option | Effect |
 |---|---|
-| `--view both` (default) | serve graphify's view on `port+1` **and** the Understand-Anything dashboard on `port` |
-| `--view ua` | only the Understand-Anything dashboard |
-| `--view graphify` | only graphify's `graph.html` + `GRAPH_REPORT.md` |
+| `--view both` (default) | the dashboard on `port`, with its Learn, Obsidian and Graphify tabs |
+| `--view ua` | the same as `both` |
+| `--view graphify` | opens only graphify's `graph.html` straight from disk in your browser, without the dashboard; no server runs |
 | `--view none` | just build + convert + validate, start nothing |
-| `--port N` | dashboard port (default 5173; graphify view uses N+1) |
+| `--port N` | dashboard port (default 5173) |
 | `--force` | overwrite an existing `knowledge-graph.json` that `/understand` produced |
 | `--branch B` | branch to download, when you pass a repository link |
 
@@ -35,8 +40,13 @@ Steps it runs:
 
 1. `graphify update <project>` → `<project>/graphify-out/` (`graph.json`, `graph.html`, `GRAPH_REPORT.md`)
 2. `graphify_to_ua.py` → `<project>/.ua/knowledge-graph.json` (or `.understand-anything/` if that legacy folder exists)
-3. `validate_ua_graph.mjs` → checks the result with the dashboard's own `validateGraph()`
-4. starts the viewer(s); Ctrl+C stops both
+3. `validate_ua_graph.mjs` → checks the result with the dashboard's own `validateGraph()`,
+   then `explain_html.py` adds the explain panel to `graph.html`
+4. starts the dashboard; Ctrl+C stops it
+
+After code changes, `bridge/refresh.sh <project>` re-maps it (keeping every explanation
+already written), rebuilds the explain panel and lists the files that are new or changed,
+so your agent only has to explain those (`enrich.py`, below).
 
 Needs `uv`, Node ≥ 22 and pnpm ≥ 10. The first run installs Understand-Anything's
 dependencies and builds its core package.
@@ -46,7 +56,7 @@ dependencies and builds its core package.
 > banner. `run.sh` prints a hint when it isn't ignored. (`.ua/` is already excluded.)
 
 > **Note:** graphify's `graph.html` loads its graph library (vis-network) from
-> unpkg.com, so that view needs an internet connection in the browser.
+> unpkg.com, so the Graphify tab needs an internet connection in the browser.
 
 ## How graphify's graph is mapped
 
@@ -68,8 +78,9 @@ dependencies and builds its core package.
 
 Also generated, since graphify has no LLM summaries for code:
 
-- **Summaries:** built from structure, e.g. "Class GraphBuilder in src/analyzer/graph-builder.ts
-  (line 60). Connections: imported by 1; defines 12."
+- **Summaries:** built from structure in plain words until an agent explains it, e.g.
+  "GraphBuilder is a class (a blueprint for making objects) in src/analyzer/graph-builder.ts,
+  line 60. It contains 12 smaller pieces and is used by 1 other file."
 - **Complexity:** from node degree.
 - **`contains` edges:** file → symbol, so the dashboard can drill from a file into its
   classes and functions.
@@ -84,6 +95,9 @@ python3 bridge/graphify_to_ua.py <project> [--graph graph.json] [--out out.json]
 
 # validate any knowledge-graph.json with the dashboard's own validator
 node bridge/validate_ua_graph.mjs <project>/.ua/knowledge-graph.json
+
+# (re)build the explain panel inside <project>/graphify-out/graph.html; safe to run again
+python3 bridge/explain_html.py <project>
 ```
 
 The converter refuses to overwrite a `knowledge-graph.json` it did not create (for example
@@ -173,7 +187,12 @@ Findings and how to read them: [`notes/03-side-by-side.md`](../notes/03-side-by-
 cd graphify && uv run pytest ../bridge/tests ../learn-from-zero/tests -q
 ```
 
-The unit tests cover type mapping, edge direction, confidence, layers, the tour and the
-CLI's overwrite protection. One end-to-end test runs real graphify on a tiny project and
+The unit tests cover type mapping, edge direction, confidence, layers, the tour, the
+CLI's overwrite protection and the explain panel: it is added once; it only embeds code
+from files inside the project; it skips files with secret-looking names (.env, key files,
+names containing "secret" or "credential") and any file whose text holds a
+credential-shaped string (graphify's own patterns); and source code can't break out of its
+script tag. Other files' code is embedded, so keep `graph.html` on your own machine.
+One end-to-end test runs real graphify on a tiny project and
 validates the result with `validate_ua_graph.mjs`. It is skipped when node or the built
 core package is missing.

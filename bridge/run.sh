@@ -9,11 +9,13 @@
 #   only) to ~/understand-repos/ (or $UA_REPOS_DIR), and its code is only read, never run.
 #
 #   1. graphify update <project>      -> <project>/graphify-out/ (graph.json, graph.html, GRAPH_REPORT.md)
+#      bridge/explain_html.py         -> adds the explain panel, impact view and prompts to graph.html
 #   2. bridge/graphify_to_ua.py       -> <project>/.ua/knowledge-graph.json
 #   3. bridge/validate_ua_graph.mjs   -> checked with the dashboard's own validator
 #   4. viewers (--view, default both):
-#        ua        Understand-Anything dashboard  http://127.0.0.1:<port>/?token=...
-#        graphify  graphify's graph.html + report  http://127.0.0.1:<port+1>/graph.html
+#        both, ua  the dashboard  http://127.0.0.1:<port>/?token=...  with three tabs:
+#                  Learn (step-by-step roadmap), Obsidian (dot map), Graphify (graph.html)
+#        graphify  opens graph.html straight from disk (no dashboard, no server)
 #
 # Needs: uv (Python 3.10+), Node >= 22, pnpm >= 10.
 set -euo pipefail
@@ -124,6 +126,10 @@ if [ ! -f "$PLUGIN_DIR/packages/core/dist/schema.js" ]; then
   (cd "$UA_DIR" && pnpm --filter @understand-anything/core build)
 fi
 node "$REPO_ROOT/bridge/validate_ua_graph.mjs" "$DATA_DIR/knowledge-graph.json"
+
+# plain-language side panel, impact view, health check and prompts inside graph.html
+python3 -I "$REPO_ROOT/bridge/explain_html.py" "$PROJECT_DIR" \
+  || echo "note: could not add the explain panel to graph.html (the rest still works)"
 
 if git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
   && ! git -C "$PROJECT_DIR" check-ignore -q graphify-out/graph.json; then
